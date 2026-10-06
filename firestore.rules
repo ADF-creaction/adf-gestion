@@ -32,5 +32,21 @@ service cloud.firestore {
     match /forcemajeure/{doc}  { allow read: if isMembre(); allow write: if isBureau(); }
     match /tresorerie/{doc}    { allow read: if isMembre(); allow write: if isBureau(); }
     match /decisions/{doc}     { allow read: if isMembre(); allow write: if isBureau(); }
+
+    // Votes en ligne : le bureau ouvre et clôture ; chaque membre écrit uniquement son propre bulletin,
+    // tant que le vote est ouvert. Le bulletin porte l'identifiant de la fiche membre reliée au compte.
+    match /scrutins/{sid} {
+      allow read: if isMembre();
+      allow write: if isBureau();
+      match /votes/{mid} {
+        allow read: if isMembre();
+        allow create, update: if isMembre()
+          && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.membreId == mid
+          && get(/databases/$(database)/documents/scrutins/$(sid)).data.statut == 'ouvert'
+          && request.resource.data.choix in ['pour', 'contre', 'abst']
+          && request.resource.data.uid == request.auth.uid;
+        allow delete: if false;
+      }
+    }
   }
 }

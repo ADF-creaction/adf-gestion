@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ADF Gestion</title>
-<meta name="theme-color" content="#1f3a52">
+<meta name="theme-color" content="#0e2e4d">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -19,19 +19,19 @@ img{max-width:100%}
 /* Layout: en-tête compact avec la semaine en cours, onglets, puis panneaux de travail empilés (tableaux défilants sur mobile) */
 :root{
   --bg:#f3f5f7; --surface:#ffffff; --surface-2:#eaeef2; --line:#d6dde4;
-  --ink:#16212c; --muted:#5b6b7a; --brand:#1f3a52; --accent:#c98a10; --accent-ink:#ffffff;
+  --ink:#14202c; --muted:#5a6a79; --brand:#0e2e4d; --accent:#c19a4b; --accent-ink:#1b1405;
   --ok:#2f7d4f; --ok-bg:#dff1e6; --warn:#a86400; --warn-bg:#fbedd2; --bad:#b33a2e; --bad-bg:#f8dfdb; --info:#2c5d8a; --info-bg:#dde9f5;
   --future:#e6eaee;
   --f-display:"Unbounded",system-ui,sans-serif; --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f161d; --surface:#17212b; --surface-2:#1e2a36; --line:#2b3a48;
-  --ink:#e6edf3; --muted:#93a3b2; --brand:#9cc3e4; --accent:#e3a630; --accent-ink:#1a1204;
+  --ink:#e6edf3; --muted:#93a3b2; --brand:#9cc3e4; --accent:#d4b06a; --accent-ink:#1b1405;
   --ok:#6fcf97; --ok-bg:#183a28; --warn:#f0b452; --warn-bg:#3b2b10; --bad:#f08a7e; --bad-bg:#3d1c19; --info:#8ab8e6; --info-bg:#1a2e44;
   --future:#22303d; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f161d; --surface:#17212b; --surface-2:#1e2a36; --line:#2b3a48;
-  --ink:#e6edf3; --muted:#93a3b2; --brand:#9cc3e4; --accent:#e3a630; --accent-ink:#1a1204;
+  --ink:#e6edf3; --muted:#93a3b2; --brand:#9cc3e4; --accent:#d4b06a; --accent-ink:#1b1405;
   --ok:#6fcf97; --ok-bg:#183a28; --warn:#f0b452; --warn-bg:#3b2b10; --bad:#f08a7e; --bad-bg:#3d1c19; --info:#8ab8e6; --info-bg:#1a2e44;
   --future:#22303d; color-scheme:dark}
 *{box-sizing:border-box}
@@ -39,7 +39,15 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1
 .wrap{max-width:1180px;margin:0 auto}
 header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding-block:20px 14px;border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:12px}
-.mark{width:42px;height:42px;border-radius:10px;background:var(--brand);color:var(--bg);display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.04em}
+.mark{width:48px;height:48px;border-radius:12px;background:#fff;display:grid;place-items:center;padding:5px;box-shadow:0 0 0 1px var(--line)}
+.mark img{width:100%;height:100%;object-fit:contain}
+.logo-tile{background:#fff;border-radius:14px;padding:16px 20px;display:flex;justify-content:center}
+.logo-tile img{max-width:220px;width:100%;height:auto}
+.badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;margin-left:6px}
+.votebtns{display:flex;gap:8px;flex-wrap:wrap}
+.votebtns .btn[aria-pressed="true"]{background:var(--brand);color:var(--bg);border-color:var(--brand)}
+.scrutin{border-left:4px solid var(--accent)}
+.scrutin.clos{border-left-color:var(--line)}
 .brand h1{font-family:var(--f-display);font-weight:700;font-size:20px;margin:0;letter-spacing:.01em;text-wrap:balance}
 .brand p{margin:0;color:var(--muted);font-size:12.5px}
 .weekbox{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px}
@@ -130,8 +138,8 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-weight:600}
 <div class="wrap" id="app">
   <header class="top">
     <div class="brand">
-      <div class="mark">ADF</div>
-      <div><h1>Groupement ADF</h1><p>Gestion des cotisations · cycle 2026–2027</p></div>
+      <div class="mark"><img src="img/logo-mark.png" alt="Logo ADF"></div>
+      <div><h1>Groupement ADF</h1><p>Apporteur de financement · cycle 2026–2027</p></div>
     </div>
     <div class="row"><div class="weekbox" id="weekbox"></div><button class="btn" id="btnExport" hidden>Exporter en Excel</button></div>
     <div class="who" id="who" hidden></div>
@@ -146,7 +154,7 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-weight:600}
 (() => {
 'use strict';
 // ---------- état ----------
-const S = { auth:'loading', user:null, role:null, roles:[], authMode:'login', cfg:null, membres:[], cots:[], fm:[], tres:[], decs:[], ready:{}, canWrite:false, dbOk:null, tab:'dash', filtre:'', editCot:null, confirm:null, simDate:null, redist:null, semMsg:null };
+const S = { auth:'loading', user:null, role:null, roles:[], myMembreId:null, scrutins:[], votes:{}, authMode:'login', cfg:null, membres:[], cots:[], fm:[], tres:[], decs:[], ready:{}, canWrite:false, dbOk:null, tab:'dash', filtre:'', editCot:null, confirm:null, simDate:null, redist:null, semMsg:null };
 let db = null;
 const DEF = { cotisation:1000, objectif:100000, debut:'2026-08-15', semaines:52, echeance:'2027-08-31', heure:'17:00', tauxRetard:5, tauxSortie:20, tauxCloture:10, tauxJour:1, maxFM:3, bureau:{president:'',tresorier:'',secretaire:''}, sim:{titulaire:'FADONOUGBO Florent', code:'KODJO Apolinaire', garde:'GANGBALA Donatien'}, releve:null };
 const cfg = () => Object.assign({}, DEF, S.cfg||{});
@@ -279,6 +287,15 @@ async function boot(){
     for(const [k,c] of Object.entries(COLS)){
       unsubs.push(db.collection(c).onSnapshot(q=>{ S[k]=q.docs.map(x=>Object.assign({id:x.id},x.data())); S.ready[k]=true; schedule(); }, onErr));
     }
+    unsubs.push(db.collection('roles').doc(u.uid).onSnapshot(r=>{ const d=r.exists?r.data():{}; S.myMembreId=d.membreId||null; schedule(); }, ()=>{}));
+    const voteSubs={};
+    unsubs.push(()=>Object.values(voteSubs).forEach(f=>f()));
+    unsubs.push(db.collection('scrutins').onSnapshot(q=>{
+      S.scrutins=q.docs.map(x=>Object.assign({id:x.id},x.data()));
+      for(const sc of S.scrutins) if(!voteSubs[sc.id]) voteSubs[sc.id]=db.collection('scrutins').doc(sc.id).collection('votes').onSnapshot(v=>{ S.votes[sc.id]=v.docs.map(x=>Object.assign({id:x.id},x.data())); schedule(); }, ()=>{});
+      for(const id of Object.keys(voteSubs)) if(!S.scrutins.some(x=>x.id===id)){ voteSubs[id](); delete voteSubs[id]; delete S.votes[id]; }
+      schedule();
+    }, onErr));
     if(S.canWrite) unsubs.push(db.collection('roles').onSnapshot(q=>{ S.roles=q.docs.map(x=>Object.assign({id:x.id},x.data())); schedule(); }, ()=>{}));
   });
 }
@@ -300,12 +317,13 @@ const STAT = { ok:['ok','À jour'], warn:['warn','En retard'], bad:['bad','Manqu
 const memOpts = (sel, list) => (list||actifs()).map(m=>`<option value="${m.id}" ${m.id===sel?'selected':''}>${esc(m.nom)}</option>`).join('');
 function v(id){ return document.getElementById(id)?.value?.trim() ?? ''; }
 
-const TABS = [['dash','Tableau de bord'],['cots','Cotisations'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
+const TABS = [['dash','Tableau de bord'],['votes','Votes'],['cots','Cotisations'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
 
 function render(keep){
   const app=document.getElementById('app');
   app.classList.toggle('ro', !S.canWrite);
-  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}</button>`).join('');
+  const aVoter = S.myMembreId ? S.scrutins.filter(x=>x.statut==='ouvert' && !(S.votes[x.id]||[]).some(v=>v.id===S.myMembreId)).length : 0;
+  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}${k==='votes'&&aVoter?`<span class="badge">${aVoter}</span>`:''}</button>`).join('');
   const now=nowLocal(), c=cfg();
   const lw=lastDueWeek(now), cw=currentWeek(now), wkAll=weeksAll();
   const idx = wkAll.indexOf(cw);
@@ -315,7 +333,7 @@ function render(keep){
     <div><span>Clôture</span><b>${fr(c.echeance)}</b></div>`;
   const b=[];
   if(S.auth==='noconfig') b.push(`<div class="banner bad">Configuration Firebase manquante : renseignez le fichier config.js.</div>`);
-  else if(S.dbOk && !S.canWrite) b.push(`<div class="banner info">Consultation seule : seuls les membres du bureau peuvent saisir ou modifier.</div>`);
+  else if(S.dbOk && !S.canWrite) b.push(`<div class="banner info">Consultation : seuls les membres du bureau saisissent les données. Vous pouvez voter dans l’onglet Votes.</div>`);
   document.getElementById('banners').innerHTML=b.join('');
   const main=document.getElementById('main');
   const who=document.getElementById('who');
@@ -324,7 +342,7 @@ function render(keep){
   if(S.auth!=='ok'){ main.innerHTML=vAuth(); return; }
   if(!(S.ready.membres && S.ready.cots)){ main.innerHTML='<div class="empty">Chargement des données du groupement…</div>'; return; }
   if(S.membres.length===0 && S.tab!=='params' && S.tab!=='membres'){ main.innerHTML=`<div class="card empty">Aucun membre enregistré pour l'instant. Commencez par l'onglet <b>Membres</b> pour ajouter les adhérents.</div>`; return; }
-  const fn = {dash:vDash,cots:vCots,membres:vMembres,fm:vFM,tres:vTres,decs:vDecs,sorties:vSorties,params:vParams}[S.tab];
+  const fn = {dash:vDash,votes:vVotes,cots:vCots,membres:vMembres,fm:vFM,tres:vTres,decs:vDecs,sorties:vSorties,params:vParams}[S.tab];
   const ae=document.activeElement?.id; const vals={}; main.querySelectorAll('input,select,textarea').forEach(el=>{ if(el.id) vals[el.id]=el.value; });
   main.innerHTML = `<section class="panel">${fn(now)}</section>`;
   // conserver la saisie en cours lors des rafraîchissements en direct
@@ -341,7 +359,7 @@ function vAuth(){
   if(S.auth==='verify') return `<div class="auth"><div class="card"><h2>Vérifiez votre adresse e-mail</h2><p class="small">Un lien de confirmation a été envoyé à <b>${esc(S.user.email)}</b>. Cliquez dessus, puis revenez ici.</p><div class="row"><button class="btn primary" data-act="reloadUser">J'ai confirmé</button><button class="btn" data-act="resendVerif">Renvoyer le lien</button></div></div></div>`;
   if(S.auth==='attente') return `<div class="auth"><div class="card"><h2>Compte en attente</h2><p class="small">Votre compte <b>${esc(S.user.email)}</b> est créé. Un membre du bureau doit maintenant vous donner accès dans Paramètres → Accès des membres.</p><div class="row"><button class="btn" data-act="reloadUser">Vérifier à nouveau</button></div></div></div>`;
   const reg = S.authMode==='register';
-  return `<div class="auth"><div class="card">
+  return `<div class="auth"><div class="logo-tile"><img src="img/logo-full.png" alt="ADF, Apporteur de financement"></div><div class="card">
     <h2>${reg?'Créer mon compte':'Connexion'}</h2>
     <div class="tabs2"><button class="btn ${!reg?'primary':''}" data-act="authMode" data-m="login">Se connecter</button><button class="btn ${reg?'primary':''}" data-act="authMode" data-m="register">Créer un compte</button></div>
     <form class="f" id="fAuth" style="grid-template-columns:1fr">
@@ -354,6 +372,63 @@ function vAuth(){
   </div></div>`;
 }
 const AUTH_ERR={'auth/invalid-credential':'E-mail ou mot de passe incorrect.','auth/wrong-password':'E-mail ou mot de passe incorrect.','auth/user-not-found':'Aucun compte avec cet e-mail.','auth/email-already-in-use':'Un compte existe déjà avec cet e-mail : connectez-vous.','auth/weak-password':'Le mot de passe doit faire au moins 6 caractères.','auth/invalid-email':'Adresse e-mail invalide.','auth/network-request-failed':'Pas de connexion internet.','auth/too-many-requests':'Trop de tentatives, réessayez dans quelques minutes.'};
+
+// ---------- Votes en ligne ----------
+const CHOIX={pour:['ok','Pour'],contre:['bad','Contre'],abst:['mute','Abstention']};
+function resultatScrutin(sc){
+  const vs=S.votes[sc.id]||[]; const n=actifs().length;
+  const c={pour:0,contre:0,abst:0}; vs.forEach(v=>{ if(c[v.choix]!=null) c[v.choix]++; });
+  const adopte = sc.regle==='unanimite' ? c.pour===n && n>0 : c.pour > n/2;
+  const txt = `${adopte?'Adopté':'Rejeté'} (${sc.regle==='unanimite'?'unanimité requise':'majorité des membres requise'}) : ${c.pour} pour, ${c.contre} contre, ${c.abst} abstention${c.abst>1?'s':''}, ${n-vs.length} sans vote, sur ${n} membres actifs`;
+  return {c, n, votants:vs.length, adopte, txt};
+}
+function vVotes(now){
+  const ouverts=S.scrutins.filter(x=>x.statut==='ouvert').sort((a,b)=>String(a.limite).localeCompare(String(b.limite)));
+  const clos=S.scrutins.filter(x=>x.statut!=='ouvert').sort((a,b)=>String(b.clos).localeCompare(String(a.clos)));
+  const me=S.myMembreId?memById(S.myMembreId):null;
+  const nowIso=now.date+'T'+now.heure;
+  const card=sc=>{
+    const r=resultatScrutin(sc); const vs=S.votes[sc.id]||[]; const mine=vs.find(v=>v.id===S.myMembreId);
+    const depasse = sc.statut==='ouvert' && sc.limite && nowIso>sc.limite;
+    const byM=new Map(vs.map(v=>[v.id,v]));
+    return `<div class="card scrutin ${sc.statut!=='ouvert'?'clos':''}">
+      <div class="card-h"><h2>${esc(sc.objet)}</h2>${sc.statut==='ouvert'?(depasse?pill('warn','Délai dépassé'):pill('info','Vote ouvert')):(sc.adopte?pill('ok','Adopté'):pill('bad','Rejeté'))}</div>
+      ${sc.description?`<p class="small" style="margin:0;white-space:pre-wrap">${esc(sc.description)}</p>`:''}
+      <dl class="kv"><dt>Règle</dt><dd>${sc.regle==='unanimite'?'Unanimité des membres actifs (art. 6)':'Majorité des membres actifs (art. 13)'}</dd>
+        <dt>${sc.statut==='ouvert'?'Clôture prévue':'Clôturé le'}</dt><dd>${sc.statut==='ouvert'?(sc.limite?fr(sc.limite.slice(0,10))+' à '+sc.limite.slice(11,16):'à la décision du bureau'):fr(String(sc.clos).slice(0,10))}</dd>
+        <dt>Participation</dt><dd>${r.votants} / ${r.n} membres ont voté</dd></dl>
+      <div class="meter"><i style="width:${r.n?r.votants/r.n*100:0}%"></i></div>
+      ${sc.statut==='ouvert' && !depasse ? (me ? `<div><h3 style="margin-bottom:8px">Mon vote${mine?' (modifiable jusqu’à la clôture)':''}</h3><div class="votebtns">${Object.entries(CHOIX).map(([k,[,l]])=>`<button class="btn" data-act="voter" data-id="${sc.id}" data-c="${k}" aria-pressed="${mine?.choix===k}">${l}</button>`).join('')}</div></div>`
+        : `<div class="banner warn" style="margin:0">Votre compte n’est pas encore relié à votre fiche de membre. Demandez au bureau de le faire dans Paramètres → Accès des membres.</div>`) : ''}
+      ${sc.statut!=='ouvert'?`<p class="small" style="margin:0"><b>Résultat :</b> ${esc(sc.resultat||'')}</p>`:''}
+      <details><summary class="small" style="cursor:pointer">Voir le vote de chaque membre</summary>
+        <div class="tbl"><table><tbody>${actifs().map(m=>{const v=byM.get(m.id); return `<tr><td>${esc(m.nom)}</td><td>${v?pill(...CHOIX[v.choix]):pill('mute','Pas encore voté')}</td><td class="small muted">${v?fr(String(v.date).slice(0,10))+' '+String(v.date).slice(11,16):''}</td></tr>`;}).join('')}</tbody></table></div></details>
+      ${sc.statut==='ouvert'?`<div class="row w-only">
+        <button class="btn" data-act="copyScrutin" data-id="${sc.id}">Copier l'annonce WhatsApp</button>
+        ${S.confirm==='clos'+sc.id?`<span class="confirm">Clôturer maintenant ? Résultat : ${r.adopte?'adopté':'rejeté'}. <button class="btn sm danger" data-act="cloreScrutin" data-id="${sc.id}">Oui, clôturer</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn primary" data-act="askClos" data-id="${sc.id}">Clôturer le vote</button>`}
+      </div>`:''}
+    </div>`;
+  };
+  return `
+  ${me?'':`<div class="banner info">Pour voter, votre compte doit être relié à votre fiche de membre par le bureau.</div>`}
+  <div class="card w-only"><div class="card-h"><h2>Soumettre une question au vote</h2></div>
+    <form class="f" id="fScr">
+      <label class="full">Question soumise au vote<input id="sv_o" required placeholder="Ex. Investir 300 000 F dans l'achat de pagnes Vlisco"></label>
+      <label class="full">Explications (montant, conditions, documents…)<textarea id="sv_d"></textarea></label>
+      <label>Règle de décision<select id="sv_r"><option value="majorite">Majorité des membres actifs (art. 13)</option><option value="unanimite">Unanimité (retrait, investissement : art. 6)</option></select></label>
+      <label>Date limite<input type="date" id="sv_ld"></label>
+      <label>Heure limite<input type="time" id="sv_lh" value="20:00"></label>
+      <div class="row full"><button class="btn primary" type="submit">Ouvrir le vote</button></div>
+    </form></div>
+  ${ouverts.length?ouverts.map(card).join(''):`<div class="card empty">Aucun vote en cours.</div>`}
+  ${clos.length?`<h3>Votes clôturés</h3>${clos.map(card).join('')}`:''}`;
+}
+function annonceScrutin(sc){
+  return [`*GROUPEMENT ADF : vote en ligne*`,``,`🗳️ ${sc.objet}`, sc.description?`\n${sc.description}\n`:'',
+    `Règle : ${sc.regle==='unanimite'?'unanimité des membres':'majorité des membres'}`,
+    sc.limite?`Vote ouvert jusqu'au ${fr(sc.limite.slice(0,10))} à ${sc.limite.slice(11,16).replace(':','h')}`:'',
+    ``,`Votez dans l'application, onglet « Votes » :`, location.href.split('#')[0]].filter(x=>x!=='').join('\n');
+}
 
 // ---------- Tableau de bord ----------
 function vDash(now){
@@ -688,9 +763,9 @@ function vParams(){
     <p class="small muted">Avec ${FF(c.cotisation)} sur ${c.semaines} semaines, la part obligatoire vaut ${FF(c.cotisation*c.semaines)} ; la part libre vaut ${FF(c.objectif-c.cotisation*c.semaines)} par membre.</p>
   </div>
   <div class="card w-only"><div class="card-h"><h2>Accès des membres</h2></div>
-    <p class="small muted">Chaque membre crée son compte avec son e-mail sur l'écran de connexion. Il apparaît ici « en attente ». Donnez « Membre » pour la consultation ou « Bureau » pour la saisie.</p>
-    <div class="tbl"><table><thead><tr><th>E-mail</th><th>Accès</th><th></th></tr></thead><tbody>
-    ${[...S.roles].sort((x,y)=>(x.role==='attente'?0:1)-(y.role==='attente'?0:1)||String(x.email).localeCompare(String(y.email))).map(r=>`<tr><td>${esc(r.email||r.id)}</td><td>${r.role==='bureau'?pill('ok','Bureau'):r.role==='membre'?pill('info','Membre'):r.role==='bloque'?pill('bad','Bloqué'):pill('warn','En attente')}</td><td><div class="row">${['membre','bureau','bloque'].filter(x=>x!==r.role).map(x=>`<button class="btn sm" data-act="setRole" data-id="${r.id}" data-r="${x}">${x==='membre'?'Membre':x==='bureau'?'Bureau':'Bloquer'}</button>`).join('')}</div></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Aucun compte.</td></tr>'}
+    <p class="small muted">Chaque membre crée son compte avec son e-mail sur l'écran de connexion. Il apparaît ici « en attente ». Donnez « Membre » pour la consultation ou « Bureau » pour la saisie, puis reliez chaque compte à sa fiche pour qu'il puisse voter.</p>
+    <div class="tbl"><table><thead><tr><th>E-mail</th><th>Accès</th><th>Fiche membre (pour voter)</th><th></th></tr></thead><tbody>
+    ${[...S.roles].sort((x,y)=>(x.role==='attente'?0:1)-(y.role==='attente'?0:1)||String(x.email).localeCompare(String(y.email))).map(r=>`<tr><td>${esc(r.email||r.id)}</td><td>${r.role==='bureau'?pill('ok','Bureau'):r.role==='membre'?pill('info','Membre'):r.role==='bloque'?pill('bad','Bloqué'):pill('warn','En attente')}</td><td><select id="lk_${r.id}" data-keep="0" style="width:auto"><option value="">Non relié</option>${actifs().map(m=>`<option value="${m.id}" ${r.membreId===m.id?'selected':''}>${esc(m.nom)}${S.roles.some(o=>o.id!==r.id&&o.membreId===m.id)?' (déjà relié)':''}</option>`).join('')}</select></td><td><div class="row">${['membre','bureau','bloque'].filter(x=>x!==r.role).map(x=>`<button class="btn sm" data-act="setRole" data-id="${r.id}" data-r="${x}">${x==='membre'?'Membre':x==='bureau'?'Bureau':'Bloquer'}</button>`).join('')}</div></td></tr>`).join('')||'<tr><td colspan="4" class="empty">Aucun compte.</td></tr>'}
     </tbody></table></div></div>
   <div class="card w-only"><div class="card-h"><h2>Sauvegarde complète</h2></div>
     <p class="small muted">La sauvegarde JSON contient toutes les données et permet de les restaurer. Gardez-en une copie chaque mois, en plus de l'export Excel.</p>
@@ -727,7 +802,7 @@ async function exporter(){
 function telecharger(blob, name){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
 function backupJson(){
   const strip=a=>a.map(o=>{const c={...o}; return c;});
-  const data={version:1, exporte:stamp(), config:S.cfg, membres:strip(S.membres), cotisations:strip(S.cots), forcemajeure:strip(S.fm), tresorerie:strip(S.tres), decisions:strip(S.decs)};
+  const data={version:1, exporte:stamp(), config:S.cfg, membres:strip(S.membres), cotisations:strip(S.cots), forcemajeure:strip(S.fm), tresorerie:strip(S.tres), decisions:strip(S.decs), scrutins:S.scrutins.map(x=>({...x, votes:S.votes[x.id]||[]}))};
   telecharger(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}), `ADF_sauvegarde_${nowLocal().date}.json`);
   toast('Sauvegarde téléchargée.');
 }
@@ -736,6 +811,7 @@ async function importJson(file){
   const map={membres:'membres',cotisations:'cotisations',forcemajeure:'forcemajeure',tresorerie:'tresorerie',decisions:'decisions'};
   const writes=[]; if(d.config) writes.push(['adf','config',d.config]);
   for(const [k,col] of Object.entries(map)) for(const o of (d[k]||[])){ const c={...o}; const id=c.id; delete c.id; if(id) writes.push([col,id,c]); }
+  for(const sc of (d.scrutins||[])){ const c={...sc}; const id=c.id; const vs=c.votes||[]; delete c.id; delete c.votes; if(!id) continue; writes.push(['scrutins',id,c]); /* les bulletins individuels ne sont pas réimportés : seul chaque membre peut écrire son vote */ }
   if(!writes.length){ toast('Aucune donnée dans ce fichier.'); return; }
   try{
     for(let i=0;i<writes.length;i+=400){ const b=db.batch(); for(const [col,id,data] of writes.slice(i,i+400)) b.set(db.collection(col).doc(id),data); await b.commit(); }
@@ -757,6 +833,24 @@ document.addEventListener('click', async e=>{
   if(a==='resetPw'){ const em=v('a_e'); if(!em){ toast("Saisissez d'abord votre e-mail."); return; } try{ await fbAuth.sendPasswordResetEmail(em); toast('E-mail de réinitialisation envoyé.'); }catch(e){ toast(AUTH_ERR[e.code]||'Envoi impossible.'); } return; }
   if(a==='setRole'){ await upd('roles',id,{role:t.dataset.r}); toast('Accès mis à jour.'); return; }
   if(a==='backupJson'){ backupJson(); return; }
+  if(a==='voter'){
+    if(!S.myMembreId){ toast('Compte non relié à une fiche membre.'); return; }
+    try{ await db.collection('scrutins').doc(id).collection('votes').doc(S.myMembreId).set({choix:t.dataset.c, uid:S.user.uid, date:nowLocal().date+'T'+nowLocal().heure}); toast('Vote enregistré : '+CHOIX[t.dataset.c][1]+'.'); }
+    catch(e){ toast(e?.code==='permission-denied'?'Vote refusé : le vote est clos ou votre compte n’est pas relié.':'Vote non enregistré, réessayez.'); }
+    return;
+  }
+  if(a==='askClos'){ S.confirm='clos'+id; render(); return; }
+  if(a==='cloreScrutin'){
+    S.confirm=null; const sc=S.scrutins.find(x=>x.id===id); if(!sc) return;
+    const r=resultatScrutin(sc); const n=nowLocal(); const d=n.date+'T'+n.heure;
+    const votes={}; (S.votes[id]||[]).forEach(v=>votes[v.id]=v.choix);
+    if(await upd('scrutins',id,{statut:'clos', clos:d, adopte:r.adopte, resultat:r.txt})){
+      await save(COLS.decs,'vote-'+id,{date:n.date, type:'Vote', objet:sc.objet, resultat:r.txt, responsable:'Vote en ligne', lien:'', votes});
+      toast('Vote clôturé et inscrit au registre des décisions.');
+    }
+    return;
+  }
+  if(a==='copyScrutin'){ const sc=S.scrutins.find(x=>x.id===id); const txt=annonceScrutin(sc); try{ await navigator.clipboard.writeText(txt); toast('Annonce copiée.'); }catch(_){ toast("Copie impossible sur cet appareil."); } return; }
   if(a==='askDel'){ S.confirm=id; render(); return; }
   if(a==='noConfirm'){ S.confirm=null; render(); return; }
   if(a==='delCot'){ S.confirm=null; await del(COLS.cots,id); return; }
@@ -779,6 +873,7 @@ document.addEventListener('input', e=>{
 document.addEventListener('change', e=>{
   const id=e.target.id;
   if(id==='c_f'){ S.filtre=e.target.value; render(); }
+  if(id.startsWith('lk_')){ const uid=id.slice(3); upd('roles',uid,{membreId:e.target.value||null}).then(ok=>ok&&toast('Compte relié à la fiche.')); }
   if(id==='imp_f' && e.target.files[0]){ importJson(e.target.files[0]); e.target.value=''; }
   if(id==='w_s'){ S.semMsg=+e.target.value; document.getElementById('w_msg').textContent=waMsg(S.semMsg, nowLocal()); }
   if(id==='sim_d'){ S.simDate=e.target.value; render(); }
@@ -797,6 +892,13 @@ document.addEventListener('submit', async e=>{
       if(S.authMode==='register'){ const cr=await fbAuth.createUserWithEmailAndPassword(em,pw); try{ await cr.user.sendEmailVerification(); }catch(_){} }
       else await fbAuth.signInWithEmailAndPassword(em,pw);
     }catch(err){ toast(AUTH_ERR[err.code]||'Connexion impossible.'); }
+    return;
+  }
+  if(f==='fScr'){
+    const ld=v('sv_ld'), lh=v('sv_lh')||'20:00';
+    const d={objet:v('sv_o'), description:v('sv_d'), regle:v('sv_r'), limite: ld?ld+'T'+lh:'', statut:'ouvert', ouvert:nowLocal().date+'T'+nowLocal().heure, creePar:S.user.uid};
+    if(!d.objet){ toast('Indiquez la question soumise au vote.'); return; }
+    if(await save('scrutins',null,d)){ toast('Vote ouvert. Copiez l’annonce pour prévenir les membres.'); render(); }
     return;
   }
   if(f==='fCot'){
