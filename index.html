@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ADF Gestion</title>
+<meta name="theme-color" content="#1f3a52">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+/* Layout: en-tête compact avec la semaine en cours, onglets, puis panneaux de travail empilés (tableaux défilants sur mobile) */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --surface-2:#eaeef2; --line:#d6dde4;
+  --ink:#16212c; --muted:#5b6b7a; --brand:#1f3a52; --accent:#c98a10; --accent-ink:#ffffff;
+  --ok:#2f7d4f; --ok-bg:#dff1e6; --warn:#a86400; --warn-bg:#fbedd2; --bad:#b33a2e; --bad-bg:#f8dfdb; --info:#2c5d8a; --info-bg:#dde9f5;
+  --future:#e6eaee;
+  --f-display:"Unbounded",system-ui,sans-serif; --f-body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f161d; --surface:#17212b; --surface-2:#1e2a36; --line:#2b3a48;
+  --ink:#e6edf3; --muted:#93a3b2; --brand:#9cc3e4; --accent:#e3a630; --accent-ink:#1a1204;
+  --ok:#6fcf97; --ok-bg:#183a28; --warn:#f0b452; --warn-bg:#3b2b10; --bad:#f08a7e; --bad-bg:#3d1c19; --info:#8ab8e6; --info-bg:#1a2e44;
+  --future:#22303d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f161d; --surface:#17212b; --surface-2:#1e2a36; --line:#2b3a48;
+  --ink:#e6edf3; --muted:#93a3b2; --brand:#9cc3e4; --accent:#e3a630; --accent-ink:#1a1204;
+  --ok:#6fcf97; --ok-bg:#183a28; --warn:#f0b452; --warn-bg:#3b2b10; --bad:#f08a7e; --bad-bg:#3d1c19; --info:#8ab8e6; --info-bg:#1a2e44;
+  --future:#22303d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;padding-inline:16px;padding-block:0 40px}
+.wrap{max-width:1180px;margin:0 auto}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding-block:20px 14px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:42px;height:42px;border-radius:10px;background:var(--brand);color:var(--bg);display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.04em}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:20px;margin:0;letter-spacing:.01em;text-wrap:balance}
+.brand p{margin:0;color:var(--muted);font-size:12.5px}
+.weekbox{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px}
+.weekbox div{display:flex;flex-direction:column}
+.weekbox b{font-family:var(--f-mono);font-weight:500;font-size:14px}
+.weekbox span{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px}
+nav.tabs{display:flex;gap:4px;overflow-x:auto;padding-block:10px;scrollbar-width:thin;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5}
+nav.tabs button{flex:0 0 auto;border:1px solid transparent;background:none;color:var(--muted);font:600 13px var(--f-body);padding:8px 12px;border-radius:8px;cursor:pointer}
+nav.tabs button:hover{color:var(--ink);background:var(--surface-2)}
+nav.tabs button[aria-selected="true"]{background:var(--brand);color:var(--bg)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.banner{padding:10px 14px;border-radius:8px;margin-block:10px;font-size:13px}
+.banner.info{background:var(--info-bg);color:var(--info)}
+.banner.warn{background:var(--warn-bg);color:var(--warn)}
+.banner.bad{background:var(--bad-bg);color:var(--bad)}
+section.panel{display:flex;flex-direction:column;gap:18px;padding-top:8px}
+h2{font-family:var(--f-display);font-weight:500;font-size:16px;margin:0;letter-spacing:.01em}
+h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.kpi .v{font-family:var(--f-mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi .l{color:var(--muted);font-size:12px}
+.kpi .s{font-size:12px}
+.meter{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;margin-top:6px}
+.meter i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;background:var(--surface)}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+tfoot td{font-weight:700;border-top:2px solid var(--line)}
+td.wrap{white-space:normal;min-width:180px}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.info{background:var(--info-bg);color:var(--info)} .pill.mute{background:var(--surface-2);color:var(--muted)}
+.bar{width:90px;height:6px;background:var(--surface-2);border-radius:3px;display:inline-block;vertical-align:middle;margin-right:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+form.f{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 12px;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:600}
+input,select,textarea{font:500 14px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:60px}
+.full{grid-column:1/-1}
+.btn{font:700 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.05)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.hint{font-size:12.5px;background:var(--surface-2);border-radius:7px;padding:8px 10px;color:var(--ink)}
+.heat{overflow-x:auto}
+.heat table td,.heat table th{padding:3px 2px;border:none}
+.heat td.name{padding-right:10px;font-size:12px;position:sticky;left:0;background:var(--surface);z-index:1}
+.cell{width:16px;height:16px;border-radius:3px;display:block}
+.c-ok{background:var(--ok)} .c-late{background:var(--warn)} .c-tardif{background:var(--bad);opacity:.55} .c-fm{background:var(--info)} .c-due{background:var(--bad)} .c-open{background:transparent;border:2px dashed var(--accent)} .c-future{background:var(--future)} .c-none{background:transparent}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend .cell{width:12px;height:12px}
+.heat th.wk{font-size:9.5px;font-weight:500;writing-mode:vertical-rl;transform:rotate(180deg);height:44px;color:var(--muted);letter-spacing:0;text-transform:none}
+pre.msg{white-space:pre-wrap;font-family:var(--f-body);font-size:13px;background:var(--surface-2);border-radius:8px;padding:12px;margin:0;max-height:360px;overflow:auto}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--bad-bg);color:var(--bad);padding:8px 10px;border-radius:7px;font-size:13px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;font-size:13px;z-index:20;max-width:calc(100% - 32px)}
+.ro .w-only{display:none!important}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:13px}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-weight:600}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.auth{max-width:380px;margin:48px auto;display:flex;flex-direction:column;gap:14px}
+.auth .card{gap:14px}
+.auth .tabs2{display:flex;gap:6px}
+.auth .tabs2 button{flex:1}
+.who{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<div class="wrap" id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">ADF</div>
+      <div><h1>Groupement ADF</h1><p>Gestion des cotisations · cycle 2026–2027</p></div>
+    </div>
+    <div class="row"><div class="weekbox" id="weekbox"></div><button class="btn" id="btnExport" hidden>Exporter en Excel</button></div>
+    <div class="who" id="who" hidden></div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div id="banners"></div>
+  <main id="main"><div class="empty">Chargement des données du groupement…</div></main>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+'use strict';
+// ---------- état ----------
+const S = { auth:'loading', user:null, role:null, roles:[], authMode:'login', cfg:null, membres:[], cots:[], fm:[], tres:[], decs:[], ready:{}, canWrite:false, dbOk:null, tab:'dash', filtre:'', editCot:null, confirm:null, simDate:null, redist:null, semMsg:null };
+let db = null;
+const DEF = { cotisation:1000, objectif:100000, debut:'2026-08-15', semaines:52, echeance:'2027-08-31', heure:'17:00', tauxRetard:5, tauxSortie:20, tauxCloture:10, tauxJour:1, maxFM:3, bureau:{president:'',tresorier:'',secretaire:''}, sim:{titulaire:'FADONOUGBO Florent', code:'KODJO Apolinaire', garde:'GANGBALA Donatien'}, releve:null };
+const cfg = () => Object.assign({}, DEF, S.cfg||{});
+
+// ---------- dates ----------
+const D = s => { const [y,m,d]=s.split('-').map(Number); return Math.round(Date.UTC(y,m-1,d)/864e5); };
+const S2 = n => new Date(n*864e5).toISOString().slice(0,10);
+const dow = n => new Date(n*864e5).getUTCDay();
+const fr = s => { if(!s) return ''; const [y,m,d]=s.split('-'); return `${d}/${m}/${y}`; };
+const frc = s => { if(!s) return ''; const [y,m,d]=s.split('-'); return `${d}/${m}`; };
+const JOURS=['dim.','lun.','mar.','mer.','jeu.','ven.','sam.'];
+function nowLocal(){ const n=new Date(); const p=x=>String(x).padStart(2,'0'); return { date:`${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}`, heure:`${p(n.getHours())}:${p(n.getMinutes())}` }; }
+const nextSat = n => n + ((6 - dow(n) + 7) % 7);
+const F = x => Math.round(x||0).toLocaleString('fr-FR').replace(/ | /g,' ') ;
+const FF = x => F(x)+' F';
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---------- logique métier ----------
+function weeksAll(){ const c=cfg(); const g=D(c.debut); return Array.from({length:c.semaines},(_,k)=>g+7*k); }
+function deadlinePassed(w, now){ const t=D(now.date); return t>w || (t===w && now.heure>=cfg().heure); }
+function currentWeek(now){ const t=D(now.date); let w=nextSat(t); if(dow(t)===6 && now.heure>=cfg().heure) w=t+7; return w; }
+// semaine de référence = dernier samedi dont l'échéance est passée (ou samedi courant)
+function lastDueWeek(now){ const t=D(now.date); let w=t-((dow(t)+1)%7); if(dow(t)===6 && now.heure<cfg().heure) w-=7; return w; }
+const memById = id => S.membres.find(m=>m.id===id);
+const actifs = () => S.membres.filter(m=>m.statut==='actif').sort(byOrdre);
+const comptes = () => S.membres.filter(m=>m.statut==='actif'||m.statut==='demission'||m.statut==='exclu').sort(byOrdre);
+function byOrdre(a,b){ return (a.ordre??99)-(b.ordre??99) || a.nom.localeCompare(b.nom); }
+
+function memberWeeks(m){
+  const all=weeksAll(); const st=D(m.debut||cfg().debut);
+  const end = m.sortie?.date ? D(m.sortie.date) : Infinity;
+  return all.filter(w=>w>=st && w<=end);
+}
+function fmValid(mid, w){ return S.fm.some(f=>f.membreId===mid && f.statut==='validee' && D(f.semaine)===w); }
+function payOrder(a,b){ return (a.date+(a.heure||'00:00')+(a.cree||'')).localeCompare(b.date+(b.heure||'00:00')+(b.cree||'')); }
+
+// Ventile les versements: 1 000 F par semaine due (les plus anciennes d'abord, jamais au-delà de la semaine en cours du versement), le surplus va à la part libre
+function analyse(m, extra, now){
+  now = now || nowLocal(); const c=cfg();
+  const pays = S.cots.filter(p=>p.membreId===m.id && (!extra || !S.editCot || p.id!==S.editCot)).concat(extra?[extra]:[]).sort(payOrder);
+  const wk = memberWeeks(m).map(w=>({w, pay:null, state:null}));
+  let total=0, libre=0, pen=0; const news=[];
+  for(const p of pays){
+    const mt=+p.montant||0; total+=mt; pen+=+p.penalite||0;
+    const d=D(p.date); let cur=nextSat(d);
+    let amt=mt;
+    for(const x of wk){ if(x.w>cur) break; if(x.pay) continue; if(amt<c.cotisation) break; x.pay=p; amt-=c.cotisation; if(p===extra) news.push(x); }
+    libre+=amt;
+  }
+  let dues=0, lateCount=0, manq=0, fmUsed=0;
+  for(const x of wk){
+    const fm=fmValid(m.id,x.w); if(fm) fmUsed++;
+    if(x.pay){
+      const d=D(x.pay.date), h=x.pay.heure||'00:00';
+      const ontime = d<x.w || (d===x.w && h<=c.heure);
+      if(ontime) x.state='ok';
+      else if(d<=x.w+4) x.state = fm?'fm':'late';
+      else { x.state='tardif'; manq++; }
+      if(x.state==='late'||x.state==='tardif') lateCount++;
+    } else if(deadlinePassed(x.w, now)){
+      x.state = (fm && D(now.date)<=x.w+4) ? 'fm' : 'due'; if(x.state==='due'){ dues++; if(D(now.date)>x.w+4) manq++; }
+    } else x.state = (x.w===currentWeek(now)) ? 'open' : 'future';
+  }
+  const oblig = wk.length*c.cotisation; // obligatoire total sur le cycle
+  const obligCouvert = wk.filter(x=>x.pay).length*c.cotisation;
+  const restant = Math.max(0,c.objectif-total);
+  const ech=D(c.echeance), t=D(now.date);
+  const semRest = Math.max(1, Math.ceil((ech-t)/7));
+  const obligRest = wk.filter(x=>!x.pay).length*c.cotisation;
+  const libreCible = Math.max(0,c.objectif-oblig);
+  const libreRest = Math.max(0, restant-obligRest);
+  let statut='ok'; if(dues>0) statut = manq>0?'bad':'warn';
+  return {wk,total,libre,pen,dues,lateCount,manq,fmUsed,oblig,obligCouvert,restant,libreCible,libreRest,rythme:libreRest/semRest,semRest,statut,news};
+}
+
+function soldeTheorique(){
+  let s=0; for(const p of S.cots) s+=(+p.montant||0)+(+p.penalite||0);
+  for(const t of S.tres) s+= TRES_TYPES[t.type]?.sign*(+t.montant||0) || 0;
+  return s;
+}
+// Chaque pénalité est répartie entre les membres au prorata de leurs cotisations cumulées à la date où elle est payée
+function repartPenalites(){
+  const pens = S.cots.filter(p=>+p.penalite>0).sort(payOrder);
+  const pool = S.membres.filter(m=>m.statut!=='candidat');
+  const parM = Object.fromEntries(pool.map(m=>[m.id,0]));
+  const rows = pens.map(p=>{
+    const base={}; let tot=0;
+    for(const m of pool){
+      if(m.sortie?.date && m.sortie.date < p.date) continue;
+      const b=S.cots.filter(c=>c.membreId===m.id && c.date<=p.date).reduce((s,c)=>s+(+c.montant||0),0);
+      if(b>0){ base[m.id]=b; tot+=b; }
+    }
+    const parts={}; for(const [id,b] of Object.entries(base)){ parts[id]=+p.penalite*b/tot; parM[id]+=parts[id]; }
+    return {p, tot, base, parts};
+  });
+  return {rows, parM, total:pens.reduce((s,p)=>s+(+p.penalite||0),0), pool};
+}
+const TRES_TYPES = {
+  interet:{l:'Intérêt / bonus MoMo',sign:1}, entree:{l:'Autre entrée',sign:1}, retour:{l:"Retour d'investissement",sign:1},
+  frais:{l:'Frais de retrait/transfert',sign:-1}, invest:{l:'Investissement',sign:-1}, rembours:{l:'Remboursement membre sortant',sign:-1}, retrait:{l:'Autre retrait',sign:-1}
+};
+
+// ---------- db ----------
+const COLS = { membres:'membres', cots:'cotisations', fm:'forcemajeure', tres:'tresorerie', decs:'decisions' };
+let fbAuth=null, unsubs=[];
+async function boot(){
+  const conf = window.ADF_FIREBASE_CONFIG;
+  if(!window.firebase || !conf || !conf.apiKey){ S.dbOk=false; S.auth='noconfig'; render(); return; }
+  firebase.initializeApp(conf);
+  fbAuth = firebase.auth(); db = firebase.firestore();
+  try{ db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(_){}
+  fbAuth.onAuthStateChanged(async u=>{
+    unsubs.forEach(f=>f()); unsubs=[]; S.ready={};
+    if(!u){ S.user=null; S.auth='login'; S.dbOk=null; render(); return; }
+    S.user=u; S.auth='loading'; render();
+    const isOwner = u.email && u.email.toLowerCase()===String(window.ADF_OWNER_EMAIL||'').toLowerCase();
+    let role=null;
+    try{
+      const r=await db.collection('roles').doc(u.uid).get();
+      if(r.exists) role=r.data().role;
+      else { await db.collection('roles').doc(u.uid).set({role:'attente', email:u.email||'', cree:stamp()}); role='attente'; }
+    }catch(e){ role = isOwner ? 'bureau' : 'attente'; }
+    if(isOwner) role='bureau';
+    S.role=role;
+    if(isOwner && !u.emailVerified){ S.auth='verify'; render(); return; }
+    if(role!=='bureau' && role!=='membre'){ S.auth='attente'; render(); return; }
+    S.auth='ok'; S.dbOk=true; S.canWrite = role==='bureau';
+    document.getElementById('btnExport').hidden=false;
+    unsubs.push(db.doc('adf/config').onSnapshot(s=>{ S.cfg=s.exists?s.data():null; S.ready.cfg=true; schedule(); }, onErr));
+    for(const [k,c] of Object.entries(COLS)){
+      unsubs.push(db.collection(c).onSnapshot(q=>{ S[k]=q.docs.map(x=>Object.assign({id:x.id},x.data())); S.ready[k]=true; schedule(); }, onErr));
+    }
+    if(S.canWrite) unsubs.push(db.collection('roles').onSnapshot(q=>{ S.roles=q.docs.map(x=>Object.assign({id:x.id},x.data())); schedule(); }, ()=>{}));
+  });
+}
+function onErr(e){ if(e?.code==='permission-denied'){ toast("Accès refusé à certaines données."); return; } toast('Connexion aux données interrompue. Rechargez la page.'); }
+let raf=0; function schedule(){ if(raf) return; raf=requestAnimationFrame(()=>{raf=0; render(true);}); }
+async function save(col, id, data){
+  if(!S.canWrite){ toast('Consultation seule : modification impossible.'); return false; }
+  try{ const ref = id ? db.collection(col).doc(id) : db.collection(col).doc(); await ref.set(data); return true; }
+  catch(e){ if(e?.code==='permission-denied'){ S.canWrite=false; render(); toast("Vous n'avez pas le droit de modifier ces données."); } else toast('Enregistrement impossible, réessayez.'); return false; }
+}
+async function upd(col,id,data){ try{ await db.collection(col).doc(id).update(data); return true;}catch(e){ toast('Mise à jour impossible.'); return false; } }
+async function del(col,id){ try{ await db.collection(col).doc(id).delete(); toast('Supprimé.'); }catch(e){ toast('Suppression impossible.'); } }
+const stamp = () => new Date().toISOString();
+
+// ---------- UI helpers ----------
+let tt=0; function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,2600); }
+const pill = (cls,txt)=>`<span class="pill ${cls}">${esc(txt)}</span>`;
+const STAT = { ok:['ok','À jour'], warn:['warn','En retard'], bad:['bad','Manquement'] };
+const memOpts = (sel, list) => (list||actifs()).map(m=>`<option value="${m.id}" ${m.id===sel?'selected':''}>${esc(m.nom)}</option>`).join('');
+function v(id){ return document.getElementById(id)?.value?.trim() ?? ''; }
+
+const TABS = [['dash','Tableau de bord'],['cots','Cotisations'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
+
+function render(keep){
+  const app=document.getElementById('app');
+  app.classList.toggle('ro', !S.canWrite);
+  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}</button>`).join('');
+  const now=nowLocal(), c=cfg();
+  const lw=lastDueWeek(now), cw=currentWeek(now), wkAll=weeksAll();
+  const idx = wkAll.indexOf(cw);
+  document.getElementById('weekbox').innerHTML = `
+    <div><span>Semaine</span><b>${idx>=0?idx+1:'–'} / ${c.semaines}</b></div>
+    <div><span>Prochaine échéance</span><b>sam. ${frc(S2(cw))} · ${c.heure}</b></div>
+    <div><span>Clôture</span><b>${fr(c.echeance)}</b></div>`;
+  const b=[];
+  if(S.auth==='noconfig') b.push(`<div class="banner bad">Configuration Firebase manquante : renseignez le fichier config.js.</div>`);
+  else if(S.dbOk && !S.canWrite) b.push(`<div class="banner info">Consultation seule : seuls les membres du bureau peuvent saisir ou modifier.</div>`);
+  document.getElementById('banners').innerHTML=b.join('');
+  const main=document.getElementById('main');
+  const who=document.getElementById('who');
+  who.hidden=!S.user; if(S.user) who.innerHTML=`<span>${esc(S.user.email)} · ${S.role==='bureau'?'Bureau':S.role==='membre'?'Membre':'En attente'}</span><button class="btn sm" data-act="logout">Se déconnecter</button>`;
+  document.getElementById('tabs').hidden = S.auth!=='ok';
+  if(S.auth!=='ok'){ main.innerHTML=vAuth(); return; }
+  if(!(S.ready.membres && S.ready.cots)){ main.innerHTML='<div class="empty">Chargement des données du groupement…</div>'; return; }
+  if(S.membres.length===0 && S.tab!=='params' && S.tab!=='membres'){ main.innerHTML=`<div class="card empty">Aucun membre enregistré pour l'instant. Commencez par l'onglet <b>Membres</b> pour ajouter les adhérents.</div>`; return; }
+  const fn = {dash:vDash,cots:vCots,membres:vMembres,fm:vFM,tres:vTres,decs:vDecs,sorties:vSorties,params:vParams}[S.tab];
+  const ae=document.activeElement?.id; const vals={}; main.querySelectorAll('input,select,textarea').forEach(el=>{ if(el.id) vals[el.id]=el.value; });
+  main.innerHTML = `<section class="panel">${fn(now)}</section>`;
+  // conserver la saisie en cours lors des rafraîchissements en direct
+  if(keep) for(const [id,val] of Object.entries(vals)){ const el=document.getElementById(id); if(el && el.dataset.keep!=='0') el.value=val; }
+  if(ae){ const el=document.getElementById(ae); if(el) el.focus(); }
+  after();
+}
+let afterHooks=[]; function after(){ const h=afterHooks; afterHooks=[]; h.forEach(f=>f()); }
+
+// ---------- Connexion ----------
+function vAuth(){
+  if(S.auth==='loading') return '<div class="empty">Connexion…</div>';
+  if(S.auth==='noconfig') return '<div class="empty">Application non configurée.</div>';
+  if(S.auth==='verify') return `<div class="auth"><div class="card"><h2>Vérifiez votre adresse e-mail</h2><p class="small">Un lien de confirmation a été envoyé à <b>${esc(S.user.email)}</b>. Cliquez dessus, puis revenez ici.</p><div class="row"><button class="btn primary" data-act="reloadUser">J'ai confirmé</button><button class="btn" data-act="resendVerif">Renvoyer le lien</button></div></div></div>`;
+  if(S.auth==='attente') return `<div class="auth"><div class="card"><h2>Compte en attente</h2><p class="small">Votre compte <b>${esc(S.user.email)}</b> est créé. Un membre du bureau doit maintenant vous donner accès dans Paramètres → Accès des membres.</p><div class="row"><button class="btn" data-act="reloadUser">Vérifier à nouveau</button></div></div></div>`;
+  const reg = S.authMode==='register';
+  return `<div class="auth"><div class="card">
+    <h2>${reg?'Créer mon compte':'Connexion'}</h2>
+    <div class="tabs2"><button class="btn ${!reg?'primary':''}" data-act="authMode" data-m="login">Se connecter</button><button class="btn ${reg?'primary':''}" data-act="authMode" data-m="register">Créer un compte</button></div>
+    <form class="f" id="fAuth" style="grid-template-columns:1fr">
+      <label>Adresse e-mail<input type="email" id="a_e" autocomplete="email" required></label>
+      <label>Mot de passe<input type="password" id="a_p" autocomplete="${reg?'new-password':'current-password'}" minlength="6" required></label>
+      <button class="btn primary" type="submit">${reg?'Créer mon compte':'Se connecter'}</button>
+      ${reg?'':'<button class="btn sm" type="button" data-act="resetPw">Mot de passe oublié</button>'}
+    </form>
+    <p class="small muted">Réservé aux membres du groupement ADF.</p>
+  </div></div>`;
+}
+const AUTH_ERR={'auth/invalid-credential':'E-mail ou mot de passe incorrect.','auth/wrong-password':'E-mail ou mot de passe incorrect.','auth/user-not-found':'Aucun compte avec cet e-mail.','auth/email-already-in-use':'Un compte existe déjà avec cet e-mail : connectez-vous.','auth/weak-password':'Le mot de passe doit faire au moins 6 caractères.','auth/invalid-email':'Adresse e-mail invalide.','auth/network-request-failed':'Pas de connexion internet.','auth/too-many-requests':'Trop de tentatives, réessayez dans quelques minutes.'};
+
+// ---------- Tableau de bord ----------
+function vDash(now){
+  const c=cfg(); const ms=actifs(); const an=ms.map(m=>({m,a:analyse(m,null,now)}));
+  const tot=an.reduce((s,x)=>s+x.a.total,0), obj=ms.length*c.objectif;
+  const pen=S.cots.reduce((s,p)=>s+(+p.penalite||0),0);
+  const solde=soldeTheorique();
+  const half=c.objectif/2; const okHalf=an.filter(x=>x.a.total>=half).length;
+  const lw=lastDueWeek(now);
+  const enRetard=an.filter(x=>x.a.dues>0);
+  const rel=c.releve;
+  const ecart = rel ? rel.solde - solde : null;
+  return `
+  <div class="kpis">
+    <div class="kpi"><span class="l">Total cotisé · ${ms.length} membres actifs</span><span class="v">${FF(tot)}</span><span class="s muted">sur ${FF(obj)} attendus au ${fr(c.echeance)}</span><div class="meter"><i style="width:${obj?Math.min(100,tot/obj*100):0}%"></i></div></div>
+    <div class="kpi"><span class="l">Solde théorique du compte MoMo</span><span class="v">${FF(solde)}</span><span class="s ${ecart===null?'muted':ecart===0?'':'muted'}">${rel?`Relevé du ${fr(rel.date)} : ${FF(rel.solde)} · écart ${ecart>=0?'+':''}${F(ecart)} F`:'Aucun relevé MoMo saisi'}</span></div>
+    <div class="kpi"><span class="l">Pénalités encaissées</span><span class="v">${FF(pen)}</span><span class="s muted">${S.cots.filter(p=>+p.penalite>0).length} versements pénalisés</span></div>
+    <div class="kpi"><span class="l">Condition d'investissement (art. 4)</span><span class="v">${okHalf} / ${ms.length}</span><span class="s">${okHalf===ms.length&&ms.length?pill('ok','Investissement autorisé'):pill('mute',`Chaque membre doit atteindre ${FF(half)}`)}</span></div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-h"><h2>Semaine du samedi ${fr(S2(lw))}</h2>${enRetard.length?pill('warn',enRetard.length+' en retard'):pill('ok','Tout le monde est à jour')}</div>
+      ${enRetard.length?`<table><thead><tr><th>Membre</th><th class="n">Semaines dues</th><th>Délai</th></tr></thead><tbody>${enRetard.map(({m,a})=>`<tr><td>${esc(m.nom)}</td><td class="n">${a.dues}</td><td>${a.manq?pill('bad','Délai du mercredi dépassé'):pill('warn','Régulariser avant mer. '+frc(S2(lw+4)))}</td></tr>`).join('')}</tbody></table>`:`<p class="muted small">Toutes les cotisations obligatoires échues sont versées.</p>`}
+      <div class="row"><button class="btn" data-act="goto" data-tab="cots">Préparer le message WhatsApp</button></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Part libre (${FF(c.objectif - c.semaines*c.cotisation)} par membre)</h2></div>
+      <p class="small muted">En plus des ${FF(c.cotisation)} hebdomadaires obligatoires, chaque membre verse le reste à son rythme. Le rythme indiqué permet de solder au ${fr(c.echeance)}.</p>
+      <div class="tbl"><table><thead><tr><th>Membre</th><th class="n">Libre versé</th><th class="n">Reste libre</th><th class="n">Rythme conseillé</th></tr></thead><tbody>
+      ${an.map(({m,a})=>`<tr><td>${esc(m.nom)}</td><td class="n">${F(a.libre)}</td><td class="n">${F(a.libreRest)}</td><td class="n">${F(Math.ceil(a.rythme/50)*50)} F/sem.</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Situation des membres</h2><span class="small muted">Objectif individuel ${FF(c.objectif)}</span></div>
+    <div class="tbl"><table><thead><tr><th>Membre</th><th>Statut</th><th class="n">Cotisé</th><th>Avancement</th><th class="n">Reste</th><th class="n">Retards</th><th class="n">Pénalités</th><th class="n">Dérog.</th></tr></thead><tbody>
+    ${an.sort((x,y)=>y.a.total-x.a.total).map(({m,a})=>`<tr><td>${esc(m.nom)}</td><td>${pill(...STAT[a.statut])}</td><td class="n">${F(a.total)}</td><td><span class="bar"><i style="width:${Math.min(100,a.total/c.objectif*100)}%"></i></span><span class="small">${(a.total/c.objectif*100).toFixed(1)} %</span></td><td class="n">${F(a.restant)}</td><td class="n">${a.lateCount}</td><td class="n">${F(a.pen)}</td><td class="n">${a.fmUsed}/${c.maxFM}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td>Total</td><td></td><td class="n">${F(tot)}</td><td><span class="small">${obj?(tot/obj*100).toFixed(1):0} %</span></td><td class="n">${F(an.reduce((s,x)=>s+x.a.restant,0))}</td><td class="n">${an.reduce((s,x)=>s+x.a.lateCount,0)}</td><td class="n">${F(pen)}</td><td></td></tr></tfoot></table></div>
+  </div>
+  ${heatmap(an, now)}`;
+}
+function heatmap(an, now){
+  const wks=weeksAll(); const cw=currentWeek(now);
+  const show=wks.filter(w=>w<=cw+7*4);
+  const lab={ok:'Payé à temps',late:'Payé en retard (avant mercredi)',tardif:'Payé après le mercredi',fm:'Force majeure',due:'Impayé',open:'Semaine en cours',future:'À venir'};
+  return `<div class="card"><div class="card-h"><h2>Grille des cotisations obligatoires</h2></div>
+  <div class="legend">${Object.entries(lab).map(([k,l])=>`<span><i class="cell c-${k}"></i>${l}</span>`).join('')}</div>
+  <div class="heat"><table><thead><tr><th></th>${show.map(w=>`<th class="wk">${frc(S2(w))}</th>`).join('')}</tr></thead><tbody>
+  ${an.map(({m,a})=>{ const map=new Map(a.wk.map(x=>[x.w,x])); return `<tr><td class="name">${esc(m.nom)}</td>${show.map(w=>{const x=map.get(w); const st=x?x.state:'none'; const t=x?`${frc(S2(w))} · ${lab[st]||''}${x.pay?' · versé le '+fr(x.pay.date):''}`:'Avant adhésion'; return `<td><i class="cell c-${st}" title="${esc(t)}"></i></td>`;}).join('')}</tr>`;}).join('')}
+  </tbody></table></div></div>`;
+}
+
+// ---------- Cotisations ----------
+function vCots(now){
+  const c=cfg(); const ed = S.editCot ? S.cots.find(p=>p.id===S.editCot) : null;
+  const list = S.cots.filter(p=>!S.filtre || p.membreId===S.filtre).sort((a,b)=>payOrder(b,a));
+  afterHooks.push(updHint);
+  const lw = S.semMsg ?? lastDueWeek(now);
+  return `
+  <div class="card w-only">
+    <div class="card-h"><h2>${ed?'Modifier le versement':'Enregistrer un versement'}</h2>${ed?`<button class="btn sm" data-act="cancelEdit">Annuler</button>`:''}</div>
+    <form class="f" id="fCot">
+      <label>Membre<select id="c_m">${memOpts(ed?.membreId)}</select></label>
+      <label>Date du versement<input type="date" id="c_d" value="${ed?.date||now.date}"></label>
+      <label>Heure<input type="time" id="c_h" value="${ed?.heure||now.heure}"></label>
+      <label>Montant (F)<input type="number" min="0" step="50" id="c_a" value="${ed?.montant??c.cotisation}"></label>
+      <label>Pénalité (F)<input type="number" min="0" step="10" id="c_p" value="${ed?.penalite??0}"></label>
+      <label class="full">Observation<input id="c_o" value="${esc(ed?.obs||'')}" placeholder="Ex. capture reçue le 20/09 à 2h22"></label>
+      <div class="hint full" id="c_hint"></div>
+      <div class="row full"><button class="btn primary" type="submit">${ed?'Enregistrer les modifications':'Enregistrer le versement'}</button></div>
+    </form>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-h"><h2>Message WhatsApp de la semaine</h2>
+        <select id="w_s" style="width:auto">${weeksAll().filter(w=>w<=lastDueWeek(now)).reverse().map(w=>`<option value="${w}" ${w===lw?'selected':''}>Samedi ${fr(S2(w))}</option>`).join('')}</select></div>
+      <pre class="msg" id="w_msg">${esc(waMsg(lw, now))}</pre>
+      <div class="row"><button class="btn primary" data-act="copyMsg">Copier le message</button></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Règle appliquée</h2></div>
+      <dl class="kv">
+        <dt>Obligatoire</dt><dd>${FF(c.cotisation)} chaque samedi avant ${c.heure}</dd>
+        <dt>Retard</dt><dd>Pénalité de ${c.tauxRetard} % (${FF(c.cotisation*c.tauxRetard/100)}), régularisation avant le mercredi</dd>
+        <dt>Surplus</dt><dd>Tout montant au-delà des semaines dues va à la part libre ; il ne paie pas les samedis à venir</dd>
+        <dt>Objectif</dt><dd>${FF(c.objectif)} par membre au ${fr(c.echeance)}</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Journal des versements</h2>
+      <select id="c_f" style="width:auto" data-keep="0"><option value="">Tous les membres</option>${memOpts(S.filtre, comptes())}</select></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Membre</th><th class="n">Montant</th><th class="n">Pénalité</th><th>Observation</th><th class="w-only"></th></tr></thead><tbody>
+    ${list.length?list.map(p=>`<tr><td>${fr(p.date)}${p.heure?` <span class="muted small">${p.heure}</span>`:''}</td><td>${esc(memById(p.membreId)?.nom||'?')}</td><td class="n">${F(p.montant)}</td><td class="n">${+p.penalite?F(p.penalite):''}</td><td class="wrap small muted">${esc(p.obs||'')}</td><td class="w-only">${S.confirm===p.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delCot" data-id="${p.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<div class="row"><button class="btn sm" data-act="editCot" data-id="${p.id}">Modifier</button><button class="btn sm danger" data-act="askDel" data-id="${p.id}">Supprimer</button></div>`}</td></tr>`).join(''):`<tr><td colspan="6" class="empty">Aucun versement enregistré.</td></tr>`}
+    </tbody><tfoot><tr><td colspan="2">${list.length} versements</td><td class="n">${F(list.reduce((s,p)=>s+(+p.montant||0),0))}</td><td class="n">${F(list.reduce((s,p)=>s+(+p.penalite||0),0))}</td><td colspan="2"></td></tr></tfoot></table></div>
+  </div>`;
+}
+function updHint(){
+  const el=document.getElementById('c_hint'); if(!el) return;
+  const m=memById(v('c_m')); const date=v('c_d'); if(!m||!date){ el.textContent='Choisissez un membre et une date.'; return; }
+  const c=cfg(); const p={id:'_new', membreId:m.id, date, heure:v('c_h'), montant:+v('c_a')||0, penalite:0};
+  const a=analyse(m,p);
+  const cov=a.news.map(x=>x);
+  const late=cov.filter(x=>x.state==='late'||x.state==='tardif');
+  const libre = p.montant - cov.length*c.cotisation;
+  const sugg = late.length*Math.round(c.cotisation*c.tauxRetard/100);
+  const parts=[];
+  if(cov.length) parts.push(`Couvre ${cov.length>1?'les samedis':'le samedi'} ${cov.map(x=>frc(S2(x.w))+(x.state==='late'?' (en retard)':x.state==='tardif'?' (après mercredi)':x.state==='fm'?' (force majeure)':'')).join(', ')}`);
+  else parts.push('Aucune semaine obligatoire due à couvrir');
+  if(libre>0) parts.push(`${FF(libre)} vers la part libre`);
+  parts.push(sugg?`pénalité suggérée : ${FF(sugg)}`:'aucune pénalité');
+  el.textContent = parts.join(' · ')+'.';
+  const pe=document.getElementById('c_p'); if(pe && !S.editCot && pe.dataset.touched!=='1') pe.value=sugg;
+}
+function waMsg(w, now){
+  const c=cfg(); const ms=actifs();
+  const ok=[], late=[], fm=[], due=[];
+  let tot=0;
+  for(const m of ms){ const a=analyse(m,null,now); tot+=a.total; const x=a.wk.find(y=>y.w===w); if(!x) continue;
+    if(x.state==='ok') ok.push(m.nom); else if(x.state==='late'||x.state==='tardif') late.push(m.nom); else if(x.state==='fm') fm.push(m.nom); else if(x.state==='due') due.push(m.nom); }
+  const L=[`*GROUPEMENT ADF : point des cotisations*`,`Semaine du samedi ${fr(S2(w))}`,''];
+  L.push(`✅ À temps (${ok.length}) : ${ok.join(', ')||'–'}`);
+  if(late.length) L.push(`🕒 En retard, pénalité ${c.tauxRetard} % (${late.length}) : ${late.join(', ')}`);
+  if(fm.length) L.push(`🛡️ Force majeure (${fm.length}) : ${fm.join(', ')}`);
+  if(due.length) L.push(`⏳ Non reçu (${due.length}) : ${due.join(', ')}\nÀ régulariser avant mercredi ${fr(S2(w+4))} avec la pénalité de ${FF(c.cotisation*c.tauxRetard/100)}.`);
+  L.push('',`Total cotisé du groupe : ${FF(tot)} / ${FF(ms.length*c.objectif)}`);
+  L.push(`Prochaine échéance : samedi ${fr(S2(w+7))} à ${c.heure.replace(':','h')}`);
+  return L.join('\n');
+}
+
+// ---------- Membres ----------
+function vMembres(now){
+  const c=cfg(); const all=[...S.membres].sort(byOrdre);
+  const SL={actif:['ok','Actif'],candidat:['info','Candidat'],demission:['mute','Démissionnaire'],exclu:['bad','Exclu']};
+  const ed = S.editMem ? memById(S.editMem) : null;
+  return `
+  <div class="card w-only">
+    <div class="card-h"><h2>${ed?'Modifier : '+esc(ed.nom):'Ajouter un membre'}</h2>${ed?`<button class="btn sm" data-act="cancelMem">Annuler</button>`:''}</div>
+    <form class="f" id="fMem">
+      <label>Nom complet<input id="m_n" value="${esc(ed?.nom||'')}" required></label>
+      <label>Contact (e-mail, téléphone)<input id="m_c" value="${esc(ed?.contact||'')}"></label>
+      <label>Parrain<select id="m_p"><option value="">Fondateur / aucun</option>${memOpts(ed?.parrain, S.membres.filter(x=>x.id!==ed?.id).sort(byOrdre))}</select></label>
+      <label>1er samedi dû<input type="date" id="m_d" value="${ed?.debut||c.debut}"></label>
+      <label>Statut<select id="m_s">${Object.entries(SL).map(([k,[,l]])=>`<option value="${k}" ${(ed?.statut||'actif')===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label>Rôle<input id="m_r" value="${esc(ed?.role||'')}" placeholder="Ex. Trésorier"></label>
+      <div class="row full"><button class="btn primary" type="submit">${ed?'Enregistrer':'Ajouter le membre'}</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>Registre des membres</h2><span class="small muted">${actifs().length} actifs · ${S.membres.length} au total</span></div>
+    <div class="tbl"><table><thead><tr><th>Nom</th><th>Statut</th><th>Rôle</th><th>Contact</th><th>Parrain</th><th>1er samedi dû</th><th class="n">Cotisé</th><th class="w-only"></th></tr></thead><tbody>
+    ${all.map(m=>{ const a=analyse(m,null,now); return `<tr><td><b>${esc(m.nom)}</b></td><td>${pill(...(SL[m.statut]||SL.actif))}</td><td>${esc(m.role||'')}</td><td class="small">${esc(m.contact||'')}</td><td class="small">${esc(memById(m.parrain)?.nom||'')}</td><td>${fr(m.debut)}</td><td class="n">${F(a.total)}</td><td class="w-only"><button class="btn sm" data-act="editMem" data-id="${m.id}">Modifier</button></td></tr>`;}).join('')||`<tr><td colspan="8" class="empty">Aucun membre.</td></tr>`}
+    </tbody></table></div>
+    <p class="small muted">Le « 1er samedi dû » fixe le début des cotisations obligatoires d'un membre arrivé après le ${fr(c.debut)}. La part libre à verser augmente d'autant.</p>
+  </div>`;
+}
+
+// ---------- Force majeure ----------
+function vFM(now){
+  const c=cfg(); const list=[...S.fm].sort((a,b)=>b.semaine.localeCompare(a.semaine));
+  const wkOpts = weeksAll().filter(w=>w>=lastDueWeek(now)-14).map(w=>`<option value="${S2(w)}">Samedi ${fr(S2(w))}</option>`).join('');
+  return `
+  <div class="card w-only"><div class="card-h"><h2>Enregistrer une demande de dérogation</h2></div>
+    <form class="f" id="fFM">
+      <label>Membre<select id="f_m">${memOpts()}</select></label>
+      <label>Samedi concerné<select id="f_w">${wkOpts}</select></label>
+      <label>Demande reçue le<input type="date" id="f_d" value="${now.date}"></label>
+      <label>À<input type="time" id="f_h" value="${now.heure}"></label>
+      <label>Décision du groupe<select id="f_s"><option value="attente">En attente</option><option value="validee">Validée</option><option value="refusee">Refusée</option></select></label>
+      <label class="full">Motif<input id="f_o"></label>
+      <div class="hint full">La demande doit arriver au moins 72 h avant l'échéance (au plus tard le mercredi précédent à ${c.heure}). Une dérogation validée reporte le paiement au mercredi suivant, sans pénalité. Maximum ${c.maxFM} par membre et par cycle.</div>
+      <div class="row full"><button class="btn primary" type="submit">Enregistrer la demande</button></div>
+    </form></div>
+  <div class="card"><div class="card-h"><h2>Dérogations utilisées</h2></div>
+    <div class="tbl"><table><thead><tr><th>Membre</th><th class="n">Validées</th><th>Solde</th></tr></thead><tbody>
+    ${actifs().map(m=>{const n=S.fm.filter(f=>f.membreId===m.id&&f.statut==='validee').length; return `<tr><td>${esc(m.nom)}</td><td class="n">${n} / ${c.maxFM}</td><td>${n>=c.maxFM?pill('bad','Épuisé'):pill('ok',(c.maxFM-n)+' restante'+(c.maxFM-n>1?'s':''))}</td></tr>`;}).join('')}
+    </tbody></table></div></div>
+  <div class="card"><div class="card-h"><h2>Historique des demandes</h2></div>
+    <div class="tbl"><table><thead><tr><th>Samedi</th><th>Membre</th><th>Demandée le</th><th>Délai 72 h</th><th>Décision</th><th>Motif</th><th class="w-only"></th></tr></thead><tbody>
+    ${list.length?list.map(f=>{ const lim=D(f.semaine)-3; const inTime = D(f.dateDemande)<lim || (D(f.dateDemande)===lim && (f.heureDemande||'00:00')<=c.heure);
+      const st={attente:['warn','En attente'],validee:['ok','Validée'],refusee:['bad','Refusée']}[f.statut];
+      return `<tr><td>${fr(f.semaine)}</td><td>${esc(memById(f.membreId)?.nom||'?')}</td><td>${fr(f.dateDemande)} ${f.heureDemande||''}</td><td>${inTime?pill('ok','Respecté'):pill('bad','Hors délai')}</td><td>${pill(...st)}</td><td class="wrap small">${esc(f.motif||'')}</td><td class="w-only"><div class="row">${f.statut!=='validee'?`<button class="btn sm" data-act="fmSet" data-id="${f.id}" data-s="validee">Valider</button>`:''}${f.statut!=='refusee'?`<button class="btn sm" data-act="fmSet" data-id="${f.id}" data-s="refusee">Refuser</button>`:''}<button class="btn sm danger" data-act="delFM" data-id="${f.id}">Supprimer</button></div></td></tr>`;}).join(''):`<tr><td colspan="7" class="empty">Aucune demande de force majeure.</td></tr>`}
+    </tbody></table></div></div>`;
+}
+
+// ---------- Trésorerie ----------
+function vTres(now){
+  const c=cfg(); const cotT=S.cots.reduce((s,p)=>s+(+p.montant||0),0), penT=S.cots.reduce((s,p)=>s+(+p.penalite||0),0);
+  const sums={}; for(const t of S.tres){ sums[t.type]=(sums[t.type]||0)+(+t.montant||0); }
+  const solde=soldeTheorique(); const rel=c.releve;
+  const ms=actifs(); const okAll = ms.length && ms.every(m=>analyse(m,null,now).total>=c.objectif/2);
+  const list=[...S.tres].sort((a,b)=>b.date.localeCompare(a.date));
+  return `
+  <div class="grid2">
+    <div class="card"><div class="card-h"><h2>Compte MTN Mobile Money</h2></div>
+      <dl class="kv">
+        <dt>Cotisations reçues</dt><dd>${FF(cotT)}</dd>
+        <dt>Pénalités reçues</dt><dd>${FF(penT)}</dd>
+        ${Object.entries(TRES_TYPES).filter(([k])=>sums[k]).map(([k,t])=>`<dt>${t.l}</dt><dd>${t.sign<0?'− ':''}${FF(sums[k])}</dd>`).join('')}
+        <dt>Solde théorique</dt><dd style="font-size:16px">${FF(solde)}</dd>
+        <dt>Dernier relevé</dt><dd>${rel?`${FF(rel.solde)} le ${fr(rel.date)} · écart ${rel.solde-solde>=0?'+':''}${F(rel.solde-solde)} F`:'non saisi'}</dd>
+      </dl>
+      <form class="f w-only" id="fRel">
+        <label>Solde réel lu sur la SIM<input type="number" id="r_s" min="0"></label>
+        <label>Date du relevé<input type="date" id="r_d" value="${now.date}"></label>
+        <div class="row"><button class="btn" type="submit">Enregistrer le relevé</button></div>
+      </form>
+    </div>
+    <div class="card"><div class="card-h"><h2>Sécurité de la SIM (art. 5 et 6)</h2></div>
+      <dl class="kv"><dt>Titulaire de la SIM</dt><dd>${esc(c.sim.titulaire)}</dd><dt>Code secret</dt><dd>${esc(c.sim.code)}</dd><dt>Garde physique</dt><dd>${esc(c.sim.garde)}</dd></dl>
+      <p class="small muted">Tout retrait, transfert ou mouvement exige l'accord écrit et unanime des membres (e-mail, WhatsApp ou Messenger). Notez la référence de cet accord sur chaque sortie.</p>
+      <p class="small">Investissement (art. 4) : ${okAll?pill('ok','autorisé, tous les membres ont atteint 50 %'):pill('warn','non autorisé tant que tous les membres n’ont pas atteint '+FF(c.objectif/2))}</p>
+    </div>
+  </div>
+  <div class="card w-only"><div class="card-h"><h2>Enregistrer un mouvement</h2></div>
+    <form class="f" id="fTres">
+      <label>Type<select id="t_t">${Object.entries(TRES_TYPES).map(([k,t])=>`<option value="${k}">${t.sign>0?'Entrée':'Sortie'} · ${t.l}</option>`).join('')}</select></label>
+      <label>Date<input type="date" id="t_d" value="${now.date}"></label>
+      <label>Montant (F)<input type="number" min="0" id="t_m"></label>
+      <label class="full">Libellé<input id="t_l"></label>
+      <label class="full">Référence de l'accord unanime (obligatoire pour une sortie)<input id="t_a" placeholder="Ex. Accord WhatsApp du 12/10, 10 membres sur 10"></label>
+      <div class="row full"><button class="btn primary" type="submit">Enregistrer le mouvement</button></div>
+    </form></div>
+  <div class="card"><div class="card-h"><h2>Mouvements hors cotisations</h2></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Libellé</th><th class="n">Montant</th><th>Accord</th><th class="w-only"></th></tr></thead><tbody>
+    ${list.length?list.map(t=>{const T=TRES_TYPES[t.type]||{l:t.type,sign:0}; return `<tr><td>${fr(t.date)}</td><td>${T.sign>0?pill('ok',T.l):pill('warn',T.l)}</td><td class="wrap">${esc(t.libelle||'')}</td><td class="n">${T.sign<0?'−':''}${F(t.montant)}</td><td class="wrap small">${T.sign<0?(t.accord?esc(t.accord):pill('bad','Accord manquant')):''}</td><td class="w-only">${S.confirm===t.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delTres" data-id="${t.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn sm danger" data-act="askDel" data-id="${t.id}">Supprimer</button>`}</td></tr>`;}).join(''):`<tr><td colspan="6" class="empty">Aucun mouvement : intérêts MoMo, frais ou investissements apparaîtront ici.</td></tr>`}
+    </tbody></table></div></div>`;
+}
+
+// ---------- Décisions ----------
+function vDecs(now){
+  const list=[...S.decs].sort((a,b)=>b.date.localeCompare(a.date));
+  const ms=actifs();
+  return `
+  <div class="card w-only"><div class="card-h"><h2>Nouvelle activité ou décision</h2></div>
+    <form class="f" id="fDec">
+      <label>Date<input type="date" id="d_d" value="${now.date}"></label>
+      <label>Type<select id="d_t"><option>Réunion</option><option>Décision</option><option>Vote</option><option>Adhésions</option><option>Autre</option></select></label>
+      <label class="full">Ordre du jour / objet<input id="d_o" required></label>
+      <label class="full">Résultat<input id="d_r" placeholder="Laissez vide pour un vote : le résultat est calculé"></label>
+      <label>Responsable<input id="d_p" value="Bureau ADF"></label>
+      <label>Lien vers le document<input id="d_l"></label>
+      <div class="full"><h3 style="margin-bottom:8px">Votes (une voix par membre, art. 13)</h3>
+        <div class="tbl"><table><tbody>${ms.map(m=>`<tr><td>${esc(m.nom)}</td><td><select id="vote_${m.id}" style="width:auto"><option value="">—</option><option value="pour">Pour</option><option value="contre">Contre</option><option value="abst">Abstention</option></select></td></tr>`).join('')}</tbody></table></div></div>
+      <div class="row full"><button class="btn primary" type="submit">Enregistrer</button></div>
+    </form></div>
+  <div class="card"><div class="card-h"><h2>Registre des décisions et réunions</h2></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Objet</th><th>Résultat</th><th>Votes</th><th>Responsable</th><th class="w-only"></th></tr></thead><tbody>
+    ${list.length?list.map(d=>{ const vs=Object.values(d.votes||{}); const p=vs.filter(x=>x==='pour').length, cn=vs.filter(x=>x==='contre').length, ab=vs.filter(x=>x==='abst').length;
+      return `<tr><td>${fr(d.date)}</td><td>${pill('info',d.type||'')}</td><td class="wrap">${esc(d.objet)}</td><td class="wrap">${esc(d.resultat||'')}</td><td class="small">${vs.length?`${p} pour · ${cn} contre · ${ab} abst.`:''}</td><td class="small">${esc(d.responsable||'')}${d.lien?`<br><span class="muted">${esc(d.lien)}</span>`:''}</td><td class="w-only">${S.confirm===d.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delDec" data-id="${d.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn sm danger" data-act="askDel" data-id="${d.id}">Supprimer</button>`}</td></tr>`;}).join(''):`<tr><td colspan="7" class="empty">Aucune décision enregistrée.</td></tr>`}
+    </tbody></table></div></div>`;
+}
+
+// ---------- Sorties & clôture ----------
+function vSorties(now){
+  const c=cfg(); const sim=S.simDate||c.echeance;
+  const sorts=S.membres.filter(m=>m.sortie);
+  const ms=actifs(); const tres=S.tres.filter(t=>t.type==='interet').reduce((s,t)=>s+(+t.montant||0),0);
+  const redistBase = S.redist ?? tres;
+  const totAct=ms.reduce((s,m)=>s+analyse(m,null,now).total,0);
+  const late=Math.max(0,D(sim)-D(c.echeance));
+  afterHooks.push(sortHint);
+  return `
+  <div class="card w-only"><div class="card-h"><h2>Démission ou exclusion (art. 9 et 10)</h2></div>
+    <form class="f" id="fSort">
+      <label>Membre<select id="s_m">${memOpts()}</select></label>
+      <label>Type<select id="s_t"><option value="demission">Démission (préavis d'un mois)</option><option value="exclu">Exclusion (décision unanime)</option></select></label>
+      <label>Date de notification<input type="date" id="s_d" value="${now.date}"></label>
+      <div class="hint full" id="s_hint"></div>
+      <div class="row full"><button class="btn primary" type="submit">Enregistrer la sortie</button></div>
+    </form></div>
+  ${sorts.length?`<div class="card"><div class="card-h"><h2>Sorties enregistrées</h2></div><div class="tbl"><table><thead><tr><th>Membre</th><th>Type</th><th>Notifiée le</th><th class="n">Cotisé</th><th class="n">Pénalité ${c.tauxSortie} %</th><th class="n">À restituer</th><th>Versement au plus tôt</th></tr></thead><tbody>
+    ${sorts.map(m=>`<tr><td>${esc(m.nom)}</td><td>${m.sortie.type==='exclu'?pill('bad','Exclusion'):pill('mute','Démission')}</td><td>${fr(m.sortie.date)}</td><td class="n">${F(m.sortie.cotise)}</td><td class="n">${F(m.sortie.penalite)}</td><td class="n">${F(m.sortie.restitue)}</td><td>${fr(m.sortie.versement)}</td></tr>`).join('')}</tbody></table></div></div>`:''}
+  <div class="card"><div class="card-h"><h2>Simulation de clôture (art. 14)</h2><label style="flex-direction:row;align-items:center;gap:8px">Date de solde<input type="date" id="sim_d" value="${sim}" style="width:auto" data-keep="0"></label></div>
+    <p class="small muted">Écart non cotisé au ${fr(c.echeance)} : pénalité de ${c.tauxCloture} % + ${c.tauxJour} % par jour de retard supplémentaire${late?` (${late} jour${late>1?'s':''} ici)`:''}. Le calcul part des versements déjà reçus.</p>
+    <div class="tbl"><table><thead><tr><th>Membre</th><th class="n">Cotisé</th><th class="n">Écart</th><th class="n">Pénalité</th><th class="n">Total à verser</th></tr></thead><tbody>
+    ${ms.map(m=>{const a=analyse(m,null,now); const e=a.restant; const p=e? e*(c.tauxCloture+c.tauxJour*late)/100:0; return `<tr><td>${esc(m.nom)}</td><td class="n">${F(a.total)}</td><td class="n">${F(e)}</td><td class="n">${F(p)}</td><td class="n">${F(e+p)}</td></tr>`;}).join('')}
+    </tbody></table></div></div>
+  ${vRepart(now, ms, tres, redistBase)}`;
+}
+function vRepart(now, ms, tres, redistBase){
+  const R=repartPenalites(); const pool=R.pool.sort(byOrdre);
+  const totAct=ms.reduce((s,m)=>s+analyse(m,null,now).total,0);
+  return `<div class="card"><div class="card-h"><h2>Répartition des intérêts, bonus et pénalités (art. 3)</h2><label style="flex-direction:row;align-items:center;gap:8px">Intérêts et bonus à répartir<input type="number" id="rd_m" value="${redistBase}" style="width:140px" data-keep="0"></label></div>
+    <p class="small muted">Chaque pénalité est partagée dès son paiement entre les membres, au prorata de leurs cotisations cumulées à cette date. Les intérêts et bonus (par défaut ceux enregistrés en trésorerie : ${FF(tres)}) sont partagés au prorata des cotisations actuelles.</p>
+    <div class="tbl"><table><thead><tr><th>Membre</th><th class="n">Cotisé</th><th class="n">Part actuelle</th><th class="n">Pénalités reçues</th><th class="n">Intérêts / bonus</th><th class="n">Total à recevoir</th></tr></thead><tbody>
+    ${pool.map(m=>{const t=analyse(m,null,now).total; const act=m.statut==='actif'; const sh=act&&totAct?t/totAct:0; const ib=redistBase*sh; const pe=R.parM[m.id]||0; return `<tr><td>${esc(m.nom)}${act?'':' '+pill('mute','sorti')}</td><td class="n">${F(t)}</td><td class="n">${act?(sh*100).toFixed(2)+' %':'–'}</td><td class="n">${F(pe)}</td><td class="n">${F(ib)}</td><td class="n"><b>${F(pe+ib)}</b></td></tr>`;}).join('')}
+    </tbody><tfoot><tr><td>Total</td><td class="n">${F(totAct)}</td><td></td><td class="n">${F(R.total)}</td><td class="n">${F(redistBase)}</td><td class="n">${F(R.total+redistBase)}</td></tr></tfoot></table></div>
+  </div>
+  <div class="card"><div class="card-h"><h2>Détail de la répartition de chaque pénalité</h2><span class="small muted">${R.rows.length} pénalités · ${FF(R.total)}</span></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Payée par</th><th class="n">Pénalité</th><th class="n">Base cotisée</th>${pool.map(m=>`<th class="n">${esc(m.nom.split(' ')[0])}</th>`).join('')}</tr></thead><tbody>
+    ${R.rows.length?R.rows.map(r=>`<tr><td>${fr(r.p.date)}</td><td>${esc(memById(r.p.membreId)?.nom||'?')}</td><td class="n">${F(r.p.penalite)}</td><td class="n">${F(r.tot)}</td>${pool.map(m=>`<td class="n">${r.parts[m.id]!=null?r.parts[m.id].toFixed(2).replace('.',','):''}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${4+pool.length}" class="empty">Aucune pénalité payée.</td></tr>`}
+    </tbody><tfoot><tr><td colspan="2">Total</td><td class="n">${F(R.total)}</td><td></td>${pool.map(m=>`<td class="n">${(R.parM[m.id]||0).toFixed(2).replace('.',',')}</td>`).join('')}</tr></tfoot></table></div>
+  </div>`;
+}
+function sortHint(){
+  const el=document.getElementById('s_hint'); if(!el) return; const c=cfg();
+  const m=memById(v('s_m')); const d=v('s_d'); if(!m||!d){el.textContent='';return;}
+  const cot=S.cots.filter(p=>p.membreId===m.id && p.date<=d).reduce((s,p)=>s+(+p.montant||0),0);
+  const pen=Math.round(cot*c.tauxSortie/100);
+  const vers = v('s_t')==='demission' ? addMonth(d) : d;
+  el.textContent=`Cotisé au ${fr(d)} : ${FF(cot)} · pénalité ${c.tauxSortie} % : ${FF(pen)} · à restituer : ${FF(cot-pen)}${v('s_t')==='demission'?` à partir du ${fr(vers)} (fin du préavis)`:''}.`;
+}
+function addMonth(s){ const [y,m,d]=s.split('-').map(Number); const dt=new Date(Date.UTC(y,m,d)); return dt.toISOString().slice(0,10); }
+
+// ---------- Paramètres ----------
+function vParams(){
+  const c=cfg();
+  return `<div class="card"><div class="card-h"><h2>Règlement du cycle</h2></div>
+    <form class="f" id="fCfg">
+      <label>Cotisation hebdomadaire (F)<input type="number" id="p_c" value="${c.cotisation}"></label>
+      <label>Objectif par membre (F)<input type="number" id="p_o" value="${c.objectif}"></label>
+      <label>1er samedi du cycle<input type="date" id="p_d" value="${c.debut}"></label>
+      <label>Nombre de semaines obligatoires<input type="number" id="p_s" value="${c.semaines}"></label>
+      <label>Date de clôture<input type="date" id="p_e" value="${c.echeance}"></label>
+      <label>Heure limite du samedi<input type="time" id="p_h" value="${c.heure}"></label>
+      <label>Pénalité de retard (%)<input type="number" id="p_r" value="${c.tauxRetard}"></label>
+      <label>Pénalité de sortie (%)<input type="number" id="p_x" value="${c.tauxSortie}"></label>
+      <label>Pénalité de clôture (%)<input type="number" id="p_k" value="${c.tauxCloture}"></label>
+      <label>Majoration par jour (%)<input type="number" id="p_j" value="${c.tauxJour}"></label>
+      <label>Dérogations max. par membre<input type="number" id="p_f" value="${c.maxFM}"></label>
+      <div class="full"><h3>Bureau élu (art. 12)</h3></div>
+      <label>Président<input id="p_bp" value="${esc(c.bureau.president)}"></label>
+      <label>Trésorier<input id="p_bt" value="${esc(c.bureau.tresorier)}"></label>
+      <label>Secrétaire<input id="p_bs" value="${esc(c.bureau.secretaire)}"></label>
+      <div class="full"><h3>Gestion triangulaire de la SIM (art. 5)</h3></div>
+      <label>Titulaire de la SIM<input id="p_st" value="${esc(c.sim.titulaire)}"></label>
+      <label>Détenteur du code<input id="p_sc" value="${esc(c.sim.code)}"></label>
+      <label>Garde de la SIM<input id="p_sg" value="${esc(c.sim.garde)}"></label>
+      <div class="row full w-only"><button class="btn primary" type="submit">Enregistrer les paramètres</button></div>
+    </form>
+    <p class="small muted">Avec ${FF(c.cotisation)} sur ${c.semaines} semaines, la part obligatoire vaut ${FF(c.cotisation*c.semaines)} ; la part libre vaut ${FF(c.objectif-c.cotisation*c.semaines)} par membre.</p>
+  </div>
+  <div class="card w-only"><div class="card-h"><h2>Accès des membres</h2></div>
+    <p class="small muted">Chaque membre crée son compte avec son e-mail sur l'écran de connexion. Il apparaît ici « en attente ». Donnez « Membre » pour la consultation ou « Bureau » pour la saisie.</p>
+    <div class="tbl"><table><thead><tr><th>E-mail</th><th>Accès</th><th></th></tr></thead><tbody>
+    ${[...S.roles].sort((x,y)=>(x.role==='attente'?0:1)-(y.role==='attente'?0:1)||String(x.email).localeCompare(String(y.email))).map(r=>`<tr><td>${esc(r.email||r.id)}</td><td>${r.role==='bureau'?pill('ok','Bureau'):r.role==='membre'?pill('info','Membre'):r.role==='bloque'?pill('bad','Bloqué'):pill('warn','En attente')}</td><td><div class="row">${['membre','bureau','bloque'].filter(x=>x!==r.role).map(x=>`<button class="btn sm" data-act="setRole" data-id="${r.id}" data-r="${x}">${x==='membre'?'Membre':x==='bureau'?'Bureau':'Bloquer'}</button>`).join('')}</div></td></tr>`).join('')||'<tr><td colspan="3" class="empty">Aucun compte.</td></tr>'}
+    </tbody></table></div></div>
+  <div class="card w-only"><div class="card-h"><h2>Sauvegarde complète</h2></div>
+    <p class="small muted">La sauvegarde JSON contient toutes les données et permet de les restaurer. Gardez-en une copie chaque mois, en plus de l'export Excel.</p>
+    <div class="row"><button class="btn" data-act="backupJson">Télécharger la sauvegarde</button><label class="btn" style="flex-direction:row;color:var(--ink)">Restaurer / importer un fichier<input type="file" id="imp_f" accept="application/json,.json" hidden></label></div>
+  </div>`;
+}
+
+// ---------- export Excel ----------
+async function exporter(){
+  if(!window.XLSX){ toast("L'export n'est pas disponible : vérifiez la connexion internet."); return; }
+  const now=nowLocal(), c=cfg(), X=window.XLSX, wb=X.utils.book_new();
+  const add=(name,rows,widths)=>{ const ws=X.utils.aoa_to_sheet(rows); if(widths) ws['!cols']=widths.map(w=>({wch:w})); X.utils.book_append_sheet(wb,ws,name); };
+  const R=repartPenalites(); const nm=id=>memById(id)?.nom||'?';
+  const STL={ok:'À jour',warn:'En retard',bad:'Manquement'};
+  add('Situation',[[`GROUPEMENT ADF : situation au ${fr(now.date)} ${now.heure}`],[],
+    ['Membre','Statut','Cotisé','Avancement %','Reste à payer','Part libre versée','Reste part libre','Retards','Pénalités payées','Pénalités reçues (répartition)','Dérogations utilisées'],
+    ...comptes().map(m=>{const a=analyse(m,null,now); return [m.nom, m.statut==='actif'?STL[a.statut]:m.statut, a.total, +(a.total/c.objectif*100).toFixed(2), a.restant, a.libre, a.libreRest, a.lateCount, a.pen, +(R.parM[m.id]||0).toFixed(2), a.fmUsed];})],
+    [26,13,11,12,13,15,15,9,14,24,10]);
+  add('Versements',[['Date','Heure','Membre','Montant','Pénalité','Observation'],...[...S.cots].sort(payOrder).map(p=>[fr(p.date),p.heure||'',nm(p.membreId),+p.montant||0,+p.penalite||0,p.obs||''])],[11,7,26,10,9,44]);
+  const wks=weeksAll().filter(w=>w<=currentWeek(now));
+  const LAB={ok:'À temps',late:'Retard',tardif:'Après mercredi',fm:'Force majeure',due:'Impayé',open:'En cours',future:''};
+  add('Grille hebdomadaire',[['Membre',...wks.map(w=>fr(S2(w)))],...comptes().map(m=>{const a=analyse(m,null,now); const mp=new Map(a.wk.map(x=>[x.w,x])); return [m.nom,...wks.map(w=>mp.get(w)?LAB[mp.get(w).state]:'')];})],[26,...wks.map(()=>11)]);
+  const pool=R.pool.sort(byOrdre);
+  add('Répartition pénalités',[['Date','Payée par','Pénalité','Base cotisée',...pool.map(m=>m.nom)],...R.rows.map(r=>[fr(r.p.date),nm(r.p.membreId),+r.p.penalite,r.tot,...pool.map(m=>r.parts[m.id]!=null?+r.parts[m.id].toFixed(2):'')]),['Total','',R.total,'',...pool.map(m=>+(R.parM[m.id]||0).toFixed(2))]],[11,26,9,12,...pool.map(()=>14)]);
+  add('Membres',[['Nom','Statut','Rôle','Contact','Parrain','1er samedi dû','Sortie','Date sortie','Restitué'],...[...S.membres].sort(byOrdre).map(m=>[m.nom,m.statut,m.role||'',m.contact||'',memById(m.parrain)?.nom||'',fr(m.debut),m.sortie?.type||'',fr(m.sortie?.date),m.sortie?.restitue??''])],[26,12,12,30,26,12,10,11,10]);
+  add('Trésorerie',[['Date','Type','Libellé','Montant','Accord'],...[...S.tres].sort((a,b)=>a.date.localeCompare(b.date)).map(t=>{const T=TRES_TYPES[t.type]||{l:t.type,sign:1}; return [fr(t.date),T.l,t.libelle||'',T.sign*(+t.montant||0),t.accord||''];}),[],['Solde théorique','','',soldeTheorique(),''],['Dernier relevé MoMo',c.releve?fr(c.releve.date):'','',c.releve?.solde??'','']],[12,28,34,12,40]);
+  add('Force majeure',[['Samedi','Membre','Demandée le','Heure','Décision','Motif'],...S.fm.map(f=>[fr(f.semaine),nm(f.membreId),fr(f.dateDemande),f.heureDemande||'',f.statut,f.motif||''])],[11,26,12,7,10,40]);
+  add('Décisions',[['Date','Type','Objet','Résultat','Votes pour','Votes contre','Abstentions','Responsable','Document'],...[...S.decs].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>{const v=Object.values(d.votes||{}); return [fr(d.date),d.type||'',d.objet||'',d.resultat||'',v.filter(x=>x==='pour').length,v.filter(x=>x==='contre').length,v.filter(x=>x==='abst').length,d.responsable||'',d.lien||''];})],[11,18,40,30,9,9,9,14,22]);
+  const buf=X.write(wb,{bookType:'xlsx',type:'array'});
+  telecharger(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), `ADF_export_${now.date}.xlsx`);
+  toast('Export Excel téléchargé.');
+}
+
+function telecharger(blob, name){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
+function backupJson(){
+  const strip=a=>a.map(o=>{const c={...o}; return c;});
+  const data={version:1, exporte:stamp(), config:S.cfg, membres:strip(S.membres), cotisations:strip(S.cots), forcemajeure:strip(S.fm), tresorerie:strip(S.tres), decisions:strip(S.decs)};
+  telecharger(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}), `ADF_sauvegarde_${nowLocal().date}.json`);
+  toast('Sauvegarde téléchargée.');
+}
+async function importJson(file){
+  let d; try{ d=JSON.parse(await file.text()); }catch(_){ toast('Fichier illisible.'); return; }
+  const map={membres:'membres',cotisations:'cotisations',forcemajeure:'forcemajeure',tresorerie:'tresorerie',decisions:'decisions'};
+  const writes=[]; if(d.config) writes.push(['adf','config',d.config]);
+  for(const [k,col] of Object.entries(map)) for(const o of (d[k]||[])){ const c={...o}; const id=c.id; delete c.id; if(id) writes.push([col,id,c]); }
+  if(!writes.length){ toast('Aucune donnée dans ce fichier.'); return; }
+  try{
+    for(let i=0;i<writes.length;i+=400){ const b=db.batch(); for(const [col,id,data] of writes.slice(i,i+400)) b.set(db.collection(col).doc(id),data); await b.commit(); }
+    toast(`${writes.length} enregistrements importés.`);
+  }catch(e){ toast(e?.code==='permission-denied'?"Import refusé : réservé au bureau.":'Import interrompu, réessayez.'); }
+}
+
+// ---------- événements ----------
+document.addEventListener('click', async e=>{
+  if(e.target.closest('#btnExport')){ exporter(); return; }
+  const t=e.target.closest('[data-tab],[data-act]'); if(!t) return;
+  if(t.dataset.tab && !t.dataset.act){ S.tab=t.dataset.tab; S.confirm=null; S.editCot=null; S.editMem=null; render(); window.scrollTo({top:0}); return; }
+  const a=t.dataset.act, id=t.dataset.id;
+  if(a==='goto'){ S.tab=t.dataset.tab; render(); return; }
+  if(a==='authMode'){ S.authMode=t.dataset.m; render(); return; }
+  if(a==='logout'){ await fbAuth.signOut(); return; }
+  if(a==='reloadUser'){ try{ await fbAuth.currentUser.reload(); await fbAuth.currentUser.getIdToken(true); }catch(_){} location.reload(); return; }
+  if(a==='resendVerif'){ try{ await fbAuth.currentUser.sendEmailVerification(); toast('Lien renvoyé.'); }catch(e){ toast(AUTH_ERR[e.code]||'Envoi impossible.'); } return; }
+  if(a==='resetPw'){ const em=v('a_e'); if(!em){ toast("Saisissez d'abord votre e-mail."); return; } try{ await fbAuth.sendPasswordResetEmail(em); toast('E-mail de réinitialisation envoyé.'); }catch(e){ toast(AUTH_ERR[e.code]||'Envoi impossible.'); } return; }
+  if(a==='setRole'){ await upd('roles',id,{role:t.dataset.r}); toast('Accès mis à jour.'); return; }
+  if(a==='backupJson'){ backupJson(); return; }
+  if(a==='askDel'){ S.confirm=id; render(); return; }
+  if(a==='noConfirm'){ S.confirm=null; render(); return; }
+  if(a==='delCot'){ S.confirm=null; await del(COLS.cots,id); return; }
+  if(a==='delTres'){ S.confirm=null; await del(COLS.tres,id); return; }
+  if(a==='delDec'){ S.confirm=null; await del(COLS.decs,id); return; }
+  if(a==='delFM'){ await del(COLS.fm,id); return; }
+  if(a==='editCot'){ S.editCot=id; render(); document.getElementById('fCot')?.scrollIntoView({behavior:'smooth'}); return; }
+  if(a==='cancelEdit'){ S.editCot=null; render(); return; }
+  if(a==='editMem'){ S.editMem=id; render(); window.scrollTo({top:0,behavior:'smooth'}); return; }
+  if(a==='cancelMem'){ S.editMem=null; render(); return; }
+  if(a==='fmSet'){ const f=S.fm.find(x=>x.id===id); if(f && t.dataset.s==='validee'){ const n=S.fm.filter(x=>x.membreId===f.membreId&&x.statut==='validee').length; if(n>=cfg().maxFM){ toast('Ce membre a déjà utilisé ses '+cfg().maxFM+' dérogations.'); return; } } await upd(COLS.fm,id,{statut:t.dataset.s}); return; }
+  if(a==='copyMsg'){ const txt=document.getElementById('w_msg').textContent; try{ await navigator.clipboard.writeText(txt); toast('Message copié. Collez-le dans le groupe WhatsApp.'); }catch(_){ const r=document.createRange(); r.selectNodeContents(document.getElementById('w_msg')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Texte sélectionné : copiez-le avec votre clavier.'); } return; }
+});
+document.addEventListener('input', e=>{
+  const id=e.target.id;
+  if(['c_m','c_d','c_h','c_a'].includes(id)) updHint();
+  if(id==='c_p') e.target.dataset.touched='1';
+  if(['s_m','s_t','s_d'].includes(id)) sortHint();
+});
+document.addEventListener('change', e=>{
+  const id=e.target.id;
+  if(id==='c_f'){ S.filtre=e.target.value; render(); }
+  if(id==='imp_f' && e.target.files[0]){ importJson(e.target.files[0]); e.target.value=''; }
+  if(id==='w_s'){ S.semMsg=+e.target.value; document.getElementById('w_msg').textContent=waMsg(S.semMsg, nowLocal()); }
+  if(id==='sim_d'){ S.simDate=e.target.value; render(); }
+  if(id==='rd_m'){ S.redist=+e.target.value||0; render(); }
+  if(['c_m','c_d','c_h','c_a'].includes(id)) updHint();
+  if(['s_m','s_t','s_d'].includes(id)) sortHint();
+});
+// remplit l'aide de la sortie à l'ouverture de l'onglet
+
+
+document.addEventListener('submit', async e=>{
+  e.preventDefault(); const f=e.target.id; const c=cfg();
+  if(f==='fAuth'){
+    const em=v('a_e'), pw=document.getElementById('a_p').value;
+    try{
+      if(S.authMode==='register'){ const cr=await fbAuth.createUserWithEmailAndPassword(em,pw); try{ await cr.user.sendEmailVerification(); }catch(_){} }
+      else await fbAuth.signInWithEmailAndPassword(em,pw);
+    }catch(err){ toast(AUTH_ERR[err.code]||'Connexion impossible.'); }
+    return;
+  }
+  if(f==='fCot'){
+    const d={membreId:v('c_m'), date:v('c_d'), heure:v('c_h'), montant:+v('c_a')||0, penalite:+v('c_p')||0, obs:v('c_o')};
+    if(!d.membreId||!d.date||d.montant<=0){ toast('Indiquez le membre, la date et un montant.'); return; }
+    if(S.editCot){ const old=S.cots.find(p=>p.id===S.editCot); d.cree=old?.cree||stamp(); if(await save(COLS.cots,S.editCot,d)){ S.editCot=null; toast('Versement modifié.'); render(); } }
+    else { d.cree=stamp(); if(await save(COLS.cots,null,d)){ toast(`Versement de ${FF(d.montant)} enregistré pour ${memById(d.membreId).nom}.`); const a=document.getElementById('c_a'); if(a) a.value=c.cotisation; const o=document.getElementById('c_o'); if(o) o.value=''; const p=document.getElementById('c_p'); if(p){p.dataset.touched='';} updHint(); } }
+  }
+  if(f==='fMem'){
+    const d={nom:v('m_n'), contact:v('m_c'), parrain:v('m_p'), debut:v('m_d'), statut:v('m_s'), role:v('m_r')};
+    if(!d.nom){ toast('Le nom est obligatoire.'); return; }
+    if(D(d.debut)!==nextSat(D(d.debut))){ toast('Le 1er samedi dû doit être un samedi.'); return; }
+    if(S.editMem){ const old=memById(S.editMem); const o=Object.assign({},old,d); delete o.id; if(await save(COLS.membres,S.editMem,o)){ S.editMem=null; toast('Membre mis à jour.'); render(); } }
+    else { d.ordre=S.membres.length+1; if(await save(COLS.membres,null,d)) { toast(`${d.nom} ajouté.`); render(); } }
+  }
+  if(f==='fFM'){
+    const d={membreId:v('f_m'), semaine:v('f_w'), dateDemande:v('f_d'), heureDemande:v('f_h'), statut:v('f_s'), motif:v('f_o')};
+    if(d.statut==='validee'){ const n=S.fm.filter(x=>x.membreId===d.membreId&&x.statut==='validee').length; if(n>=c.maxFM){ toast('Ce membre a déjà utilisé ses '+c.maxFM+' dérogations.'); return; } }
+    if(await save(COLS.fm,null,d)) toast('Demande enregistrée.');
+  }
+  if(f==='fTres'){
+    const d={type:v('t_t'), date:v('t_d'), montant:+v('t_m')||0, libelle:v('t_l'), accord:v('t_a')};
+    if(d.montant<=0){ toast('Indiquez un montant.'); return; }
+    if(TRES_TYPES[d.type].sign<0 && !d.accord){ toast("Une sortie exige la référence de l'accord unanime (art. 6)."); return; }
+    if(d.type==='invest' && !actifs().every(m=>analyse(m).total>=c.objectif/2)){ toast("Investissement refusé : tous les membres n'ont pas atteint 50 % (art. 4)."); return; }
+    if(await save(COLS.tres,null,d)){ toast('Mouvement enregistré.'); ['t_m','t_l','t_a'].forEach(i=>{const el=document.getElementById(i); if(el) el.value='';}); }
+  }
+  if(f==='fRel'){
+    const s=+v('r_s'); if(!(s>=0) || v('r_s')===''){ toast('Indiquez le solde lu sur la SIM.'); return; }
+    if(await save('adf','config',Object.assign({},cfg(),{releve:{solde:s,date:v('r_d')}}))) toast('Relevé enregistré.');
+  }
+  if(f==='fDec'){
+    const votes={}; for(const m of actifs()){ const x=v('vote_'+m.id); if(x) votes[m.id]=x; }
+    const n=Object.keys(votes).length; let res=v('d_r');
+    if(!res && n){ const p=Object.values(votes).filter(x=>x==='pour').length; const tot=actifs().length; res = p===tot?`Adopté à l'unanimité (${p}/${tot})`:p>n/2?`Adopté à la majorité (${p} pour sur ${n} votants)`:`Rejeté (${p} pour sur ${n} votants)`; }
+    const d={date:v('d_d'), type:v('d_t'), objet:v('d_o'), resultat:res, responsable:v('d_p'), lien:v('d_l'), votes};
+    if(!d.objet){ toast("Indiquez l'objet."); return; }
+    if(await save(COLS.decs,null,d)){ toast('Enregistré.'); render(); }
+  }
+  if(f==='fSort'){
+    const m=memById(v('s_m')); const d=v('s_d'); const type=v('s_t');
+    const cot=S.cots.filter(p=>p.membreId===m.id && p.date<=d).reduce((s,p)=>s+(+p.montant||0),0);
+    const pen=Math.round(cot*c.tauxSortie/100);
+    const o=Object.assign({},m); delete o.id;
+    o.statut=type; o.sortie={type,date:d,cotise:cot,penalite:pen,restitue:cot-pen,versement:type==='demission'?addMonth(d):d};
+    if(await save(COLS.membres,m.id,o)){ toast(`Sortie de ${m.nom} enregistrée.`); render(); }
+  }
+  if(f==='fCfg'){
+    const n=k=>+v(k);
+    const d=Object.assign({},cfg(),{cotisation:n('p_c'),objectif:n('p_o'),debut:v('p_d'),semaines:n('p_s'),echeance:v('p_e'),heure:v('p_h'),tauxRetard:n('p_r'),tauxSortie:n('p_x'),tauxCloture:n('p_k'),tauxJour:n('p_j'),maxFM:n('p_f'),
+      bureau:{president:v('p_bp'),tresorier:v('p_bt'),secretaire:v('p_bs')}, sim:{titulaire:v('p_st'),code:v('p_sc'),garde:v('p_sg')}});
+    if(D(d.debut)!==nextSat(D(d.debut))){ toast('Le 1er jour du cycle doit être un samedi.'); return; }
+    if(await save('adf','config',d)) toast('Paramètres enregistrés.');
+  }
+});
+// rafraîchit l'horloge (semaine, retards) toutes les minutes sans écrire
+setInterval(()=>{ const ae=document.activeElement; if(!ae || !['INPUT','SELECT','TEXTAREA'].includes(ae.tagName)) render(true); }, 60000);
+render();
+boot();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }
+</script>
+</body>
+</html>

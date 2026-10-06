@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    // Propriétaire : toujours membre du bureau, à condition d'avoir confirmé son e-mail.
+    function isOwner() {
+      return signedIn()
+        && request.auth.token.email == 'apolinairekodjo@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function role() {
+      return exists(/databases/$(database)/documents/roles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role
+        : '';
+    }
+    function isBureau() { return isOwner() || (signedIn() && role() == 'bureau'); }
+    function isMembre() { return isBureau() || (signedIn() && role() == 'membre'); }
+
+    // Accès : chacun crée sa propre fiche « en attente », seul le bureau attribue les rôles.
+    match /roles/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isBureau());
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'attente';
+      allow update, delete: if isBureau();
+    }
+
+    // Données du groupement : lecture par les membres, écriture par le bureau.
+    match /adf/{doc}           { allow read: if isMembre(); allow write: if isBureau(); }
+    match /membres/{doc}       { allow read: if isMembre(); allow write: if isBureau(); }
+    match /cotisations/{doc}   { allow read: if isMembre(); allow write: if isBureau(); }
+    match /forcemajeure/{doc}  { allow read: if isMembre(); allow write: if isBureau(); }
+    match /tresorerie/{doc}    { allow read: if isMembre(); allow write: if isBureau(); }
+    match /decisions/{doc}     { allow read: if isMembre(); allow write: if isBureau(); }
+  }
+}
