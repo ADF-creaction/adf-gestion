@@ -3,21 +3,26 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    // Propriétaire : toujours membre du bureau, à condition d'avoir confirmé son e-mail.
     function isOwner() {
       return signedIn()
         && request.auth.token.email == 'apolinairekodjo@gmail.com'
         && request.auth.token.email_verified == true;
     }
+    function myRole() {
+      return get(/databases/$(database)/documents/roles/$(request.auth.uid)).data;
+    }
     function role() {
-      return exists(/databases/$(database)/documents/roles/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.role
-        : '';
+      return exists(/databases/$(database)/documents/roles/$(request.auth.uid)) ? myRole().role : '';
     }
     function isBureau() { return isOwner() || (signedIn() && role() == 'bureau'); }
     function isMembre() { return isBureau() || (signedIn() && role() == 'membre'); }
 
-    // Accès : chacun crée sa propre fiche « en attente », seul le bureau attribue les rôles.
+    // Verrouillage : un enregistrement n'est modifiable ou supprimable que 24 h après sa création.
+    function within24h(t) { return t is timestamp && request.time < t + duration.value(24, 'h'); }
+    function createdNow() { return request.resource.data.creeLe == request.time; }
+    function keepsCreation() { return request.resource.data.creeLe == resource.data.creeLe; }
+
+    // Comptes : chacun crée sa fiche « en attente », seul le bureau attribue les rôles et relie la fiche membre.
     match /roles/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isBureau());
       allow create: if signedIn() && request.auth.uid == uid
@@ -25,23 +30,57 @@ service cloud.firestore {
       allow update, delete: if isBureau();
     }
 
-    // Données du groupement : lecture par les membres, écriture par le bureau.
-    match /adf/{doc}           { allow read: if isMembre(); allow write: if isBureau(); }
-    match /membres/{doc}       { allow read: if isMembre(); allow write: if isBureau(); }
-    match /cotisations/{doc}   { allow read: if isMembre(); allow write: if isBureau(); }
-    match /forcemajeure/{doc}  { allow read: if isMembre(); allow write: if isBureau(); }
-    match /tresorerie/{doc}    { allow read: if isMembre(); allow write: if isBureau(); }
-    match /decisions/{doc}     { allow read: if isMembre(); allow write: if isBureau(); }
+    // Paramètres et fiches des membres : modifiables par le bureau (statut, sortie…).
+    match /adf/{doc}     { allow read: if isMembre(); allow write: if isBureau(); }
+    match /membres/{doc} { allow read: if isMembre(); allow write: if isBureau(); }
 
-    // Votes en ligne : le bureau ouvre et clôture ; chaque membre écrit uniquement son propre bulletin,
-    // tant que le vote est ouvert. Le bulletin porte l'identifiant de la fiche membre reliée au compte.
+    // Versements, trésorerie, décisions : verrouillés 24 h après leur création.
+    match /cotisations/{doc} {
+      allow read: if isMembre();
+      allow create: if isBureau() && createdNow();
+      allow update: if isBureau() && within24h(resource.data.creeLe) && keepsCreation();
+      allow delete: if isBureau() && within24h(resource.data.creeLe);
+    }
+    match /tresorerie/{doc} {
+      allow read: if isMembre();
+      allow create: if isBureau() && createdNow();
+      allow update: if isBureau() && within24h(resource.data.creeLe) && keepsCreation();
+      allow delete: if isBureau() && within24h(resource.data.creeLe);
+    }
+    match /decisions/{doc} {
+      allow read: if isMembre();
+      allow create: if isBureau() && createdNow();
+      allow update: if isBureau() && within24h(resource.data.creeLe) && keepsCreation();
+      allow delete: if isBureau() && within24h(resource.data.creeLe);
+    }
+
+    // Force majeure : un membre dépose sa propre demande ; le bureau décide,
+    // puis la décision est verrouillée 24 h après avoir été prise.
+    match /forcemajeure/{doc} {
+      allow read: if isMembre();
+      allow create: if createdNow() && (
+          isBureau()
+          || (isMembre()
+              && request.resource.data.membreId == myRole().membreId
+              && request.resource.data.statut == 'attente'
+              && request.resource.data.parUid == request.auth.uid));
+      allow update: if isBureau() && keepsCreation() && (
+          (resource.data.statut == 'attente' && request.resource.data.decideLe == request.time)
+          || (resource.data.statut != 'attente' && within24h(resource.data.decideLe)
+              && request.resource.data.decideLe == resource.data.decideLe));
+      allow delete: if isBureau() && (resource.data.statut == 'attente' || within24h(resource.data.decideLe));
+    }
+
+    // Votes en ligne : le bureau ouvre, clôture ou supprime un vote encore ouvert ;
+    // un vote clôturé ne change plus. Chaque membre écrit uniquement son propre bulletin.
     match /scrutins/{sid} {
       allow read: if isMembre();
-      allow write: if isBureau();
+      allow create: if isBureau() && request.resource.data.statut == 'ouvert';
+      allow update, delete: if isBureau() && resource.data.statut == 'ouvert';
       match /votes/{mid} {
         allow read: if isMembre();
         allow create, update: if isMembre()
-          && get(/databases/$(database)/documents/roles/$(request.auth.uid)).data.membreId == mid
+          && myRole().membreId == mid
           && get(/databases/$(database)/documents/scrutins/$(sid)).data.statut == 'ouvert'
           && request.resource.data.choix in ['pour', 'contre', 'abst']
           && request.resource.data.uid == request.auth.uid;

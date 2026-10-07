@@ -282,10 +282,10 @@ async function boot(){
     if(isOwner && !u.emailVerified){ S.auth='verify'; render(); return; }
     if(role!=='bureau' && role!=='membre'){ S.auth='attente'; render(); return; }
     S.auth='ok'; S.dbOk=true; S.canWrite = role==='bureau';
-    document.getElementById('btnExport').hidden=false;
+    document.getElementById('btnExport').hidden=!S.canWrite; if(!S.canWrite) S.tab='moi';
     unsubs.push(db.doc('adf/config').onSnapshot(s=>{ S.cfg=s.exists?s.data():null; S.ready.cfg=true; schedule(); }, onErr));
     for(const [k,c] of Object.entries(COLS)){
-      unsubs.push(db.collection(c).onSnapshot(q=>{ S[k]=q.docs.map(x=>Object.assign({id:x.id},x.data())); S.ready[k]=true; schedule(); }, onErr));
+      unsubs.push(db.collection(c).onSnapshot(q=>{ S[k]=q.docs.map(x=>Object.assign({id:x.id},x.data({serverTimestamps:'estimate'}))); S.ready[k]=true; schedule(); }, onErr));
     }
     unsubs.push(db.collection('roles').doc(u.uid).onSnapshot(r=>{ const d=r.exists?r.data():{}; S.myMembreId=d.membreId||null; schedule(); }, ()=>{}));
     const voteSubs={};
@@ -303,12 +303,24 @@ function onErr(e){ if(e?.code==='permission-denied'){ toast("Accès refusé à c
 let raf=0; function schedule(){ if(raf) return; raf=requestAnimationFrame(()=>{raf=0; render(true);}); }
 async function save(col, id, data){
   if(!S.canWrite){ toast('Consultation seule : modification impossible.'); return false; }
-  try{ const ref = id ? db.collection(col).doc(id) : db.collection(col).doc(); await ref.set(data); return true; }
+  try{
+    if(LOCKED_COLS.includes(col)){ const old = id ? localDoc(col,id) : null; data = Object.assign({}, data, { creeLe: old && old.creeLe ? old.creeLe : SV() }); if(old && !editable(old) && col!=='forcemajeure'){ toast('Enregistrement verrouillé : plus de 24 h.'); return false; } }
+    const ref = id ? db.collection(col).doc(id) : db.collection(col).doc(); await ref.set(data); return true; }
   catch(e){ if(e?.code==='permission-denied'){ S.canWrite=false; render(); toast("Vous n'avez pas le droit de modifier ces données."); } else toast('Enregistrement impossible, réessayez.'); return false; }
 }
-async function upd(col,id,data){ try{ await db.collection(col).doc(id).update(data); return true;}catch(e){ toast('Mise à jour impossible.'); return false; } }
-async function del(col,id){ try{ await db.collection(col).doc(id).delete(); toast('Supprimé.'); }catch(e){ toast('Suppression impossible.'); } }
+async function upd(col,id,data){ try{ await db.collection(col).doc(id).update(data); return true;}catch(e){ toast(e?.code==='permission-denied'?'Modification refusée : enregistrement verrouillé ou droits insuffisants.':'Mise à jour impossible.'); return false; } }
+async function del(col,id){ try{ await db.collection(col).doc(id).delete(); toast('Supprimé.'); }catch(e){ toast(e?.code==='permission-denied'?'Suppression refusée : enregistrement verrouillé après 24 h.':'Suppression impossible.'); } }
 const stamp = () => new Date().toISOString();
+const LOCKED_COLS = ['cotisations','tresorerie','decisions','forcemajeure'];
+const H24 = 24*3600*1000;
+const SV = () => firebase.firestore.FieldValue.serverTimestamp();
+const tsMs = t => t && typeof t.toMillis==='function' ? t.toMillis() : (t && t.seconds ? t.seconds*1000 : null);
+// un enregistrement est modifiable 24 h après sa création ; sans date de création (historique importé) il est verrouillé
+function editable(doc){ const m=tsMs(doc?.creeLe); return m!=null && Date.now()-m < H24; }
+function fmEditable(f){ if(f.statut==='attente') return true; const m=tsMs(f.decideLe); return m!=null && Date.now()-m < H24; }
+function lockLeft(doc){ const m=tsMs(doc?.creeLe); if(m==null) return ''; const h=Math.max(0,Math.ceil((H24-(Date.now()-m))/3600000)); return `modifiable encore ${h} h`; }
+const LOCK = '<span class="pill mute" title="Enregistrement verrouillé : plus de 24 h">🔒 Verrouillé</span>';
+function localDoc(col,id){ const k=Object.entries(COLS).find(([,c])=>c===col)?.[0]; return k ? (S[k]||[]).find(x=>x.id===id) : null; }
 
 // ---------- UI helpers ----------
 let tt=0; function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.hidden=false; clearTimeout(tt); tt=setTimeout(()=>t.hidden=true,2600); }
@@ -317,13 +329,16 @@ const STAT = { ok:['ok','À jour'], warn:['warn','En retard'], bad:['bad','Manqu
 const memOpts = (sel, list) => (list||actifs()).map(m=>`<option value="${m.id}" ${m.id===sel?'selected':''}>${esc(m.nom)}</option>`).join('');
 function v(id){ return document.getElementById(id)?.value?.trim() ?? ''; }
 
-const TABS = [['dash','Tableau de bord'],['votes','Votes'],['cots','Cotisations'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
+const TABS_MEMBRE = ['moi','dash','votes','fm','decs','sorties'];
+const TABS = [['moi','Mon espace'],['dash','Tableau de bord'],['votes','Votes'],['cots','Cotisations'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
 
 function render(keep){
   const app=document.getElementById('app');
   app.classList.toggle('ro', !S.canWrite);
   const aVoter = S.myMembreId ? S.scrutins.filter(x=>x.statut==='ouvert' && !(S.votes[x.id]||[]).some(v=>v.id===S.myMembreId)).length : 0;
-  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}${k==='votes'&&aVoter?`<span class="badge">${aVoter}</span>`:''}</button>`).join('');
+  const allowed = TABS.filter(([k])=> S.canWrite ? (k!=='moi' || S.myMembreId) : TABS_MEMBRE.includes(k));
+  if(!allowed.some(([k])=>k===S.tab)) S.tab = allowed[0]?.[0] || 'dash';
+  document.getElementById('tabs').innerHTML = allowed.map(([k,l])=>`<button role="tab" data-tab="${k}" aria-selected="${S.tab===k}">${l}${k==='votes'&&aVoter?`<span class="badge">${aVoter}</span>`:''}</button>`).join('');
   const now=nowLocal(), c=cfg();
   const lw=lastDueWeek(now), cw=currentWeek(now), wkAll=weeksAll();
   const idx = wkAll.indexOf(cw);
@@ -333,7 +348,7 @@ function render(keep){
     <div><span>Clôture</span><b>${fr(c.echeance)}</b></div>`;
   const b=[];
   if(S.auth==='noconfig') b.push(`<div class="banner bad">Configuration Firebase manquante : renseignez le fichier config.js.</div>`);
-  else if(S.dbOk && !S.canWrite) b.push(`<div class="banner info">Consultation : seuls les membres du bureau saisissent les données. Vous pouvez voter dans l’onglet Votes.</div>`);
+  else if(S.dbOk && !S.canWrite) b.push(`<div class="banner info">Espace membre : consultez votre situation, votez et formulez vos demandes de dérogation.</div>`);
   document.getElementById('banners').innerHTML=b.join('');
   const main=document.getElementById('main');
   const who=document.getElementById('who');
@@ -342,7 +357,7 @@ function render(keep){
   if(S.auth!=='ok'){ main.innerHTML=vAuth(); return; }
   if(!(S.ready.membres && S.ready.cots)){ main.innerHTML='<div class="empty">Chargement des données du groupement…</div>'; return; }
   if(S.membres.length===0 && S.tab!=='params' && S.tab!=='membres'){ main.innerHTML=`<div class="card empty">Aucun membre enregistré pour l'instant. Commencez par l'onglet <b>Membres</b> pour ajouter les adhérents.</div>`; return; }
-  const fn = {dash:vDash,votes:vVotes,cots:vCots,membres:vMembres,fm:vFM,tres:vTres,decs:vDecs,sorties:vSorties,params:vParams}[S.tab];
+  const fn = {moi:vMoi,dash:vDash,votes:vVotes,cots:vCots,membres:vMembres,fm:S.canWrite?vFM:vFMMembre,tres:vTres,decs:vDecs,sorties:S.canWrite?vSorties:vSortiesMembre,params:vParams}[S.tab];
   const ae=document.activeElement?.id; const vals={}; main.querySelectorAll('input,select,textarea').forEach(el=>{ if(el.id) vals[el.id]=el.value; });
   main.innerHTML = `<section class="panel">${fn(now)}</section>`;
   // conserver la saisie en cours lors des rafraîchissements en direct
@@ -372,6 +387,115 @@ function vAuth(){
   </div></div>`;
 }
 const AUTH_ERR={'auth/invalid-credential':'E-mail ou mot de passe incorrect.','auth/wrong-password':'E-mail ou mot de passe incorrect.','auth/user-not-found':'Aucun compte avec cet e-mail.','auth/email-already-in-use':'Un compte existe déjà avec cet e-mail : connectez-vous.','auth/weak-password':'Le mot de passe doit faire au moins 6 caractères.','auth/invalid-email':'Adresse e-mail invalide.','auth/network-request-failed':'Pas de connexion internet.','auth/too-many-requests':'Trop de tentatives, réessayez dans quelques minutes.'};
+
+// ---------- Parts de chaque membre (intérêts, pénalités, retour sur investissement) ----------
+function partsMembre(mid, now){
+  const ms=actifs(); const tot=ms.reduce((s,m)=>s+analyse(m,null,now).total,0);
+  const m=memById(mid); const t=m?analyse(m,null,now).total:0;
+  const sh = m && m.statut==='actif' && tot ? t/tot : 0;
+  const sum=type=>S.tres.filter(x=>x.type===type).reduce((s,x)=>s+(+x.montant||0),0);
+  const interets=sum('interet'), invest=sum('invest'), retour=sum('retour');
+  const benef=Math.max(0, retour-invest);
+  const R=repartPenalites();
+  return {sh, interets, invest, retour, benef, partInt:interets*sh, partRoi:benef*sh, partPen:R.parM[mid]||0, R};
+}
+function myMember(){ return S.myMembreId ? memById(S.myMembreId) : null; }
+const NOLINK = `<div class="card"><h2>Compte non relié</h2><p class="small">Votre compte n'est pas encore relié à votre fiche de membre. Demandez au bureau de le faire dans Paramètres → Accès des membres.</p></div>`;
+
+// ---------- Mon espace ----------
+function vMoi(now){
+  const m=myMember(); if(!m) return NOLINK;
+  const c=cfg(); const a=analyse(m,null,now); const P=partsMembre(m.id,now);
+  const fmN=S.fm.filter(f=>f.membreId===m.id&&f.statut==='validee').length;
+  const pays=S.cots.filter(p=>p.membreId===m.id).sort((x,y)=>payOrder(y,x));
+  const SL={actif:['ok','Actif'],candidat:['info','Candidat'],demission:['mute','Démissionnaire'],exclu:['bad','Exclu']};
+  const wks=weeksAll(); const mp=new Map(a.wk.map(x=>[x.w,x]));
+  const lab={ok:'Payé à temps',late:'Payé en retard',tardif:'Payé après le mercredi',fm:'Force majeure',due:'Impayé',open:'Semaine en cours',future:'À venir'};
+  return `
+  <div class="card"><div class="card-h"><h2>${esc(m.nom)}</h2><div class="row">${pill(...(SL[m.statut]||SL.actif))} ${m.statut==='actif'?pill(...STAT[a.statut]):''}</div></div>
+    <dl class="kv"><dt>Rôle</dt><dd>${esc(m.role||'Membre')}</dd><dt>Accès</dt><dd>${S.role==='bureau'?'Bureau':'Membre'}</dd><dt>Parrain</dt><dd>${esc(memById(m.parrain)?.nom||'Fondateur')}</dd><dt>Contact</dt><dd>${esc(m.contact||'—')}</dd><dt>1er samedi dû</dt><dd>${fr(m.debut)}</dd></dl>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><span class="l">Mes cotisations</span><span class="v">${FF(a.total)}</span><span class="s muted">${(a.total/c.objectif*100).toFixed(1)} % de ${FF(c.objectif)}</span><div class="meter"><i style="width:${Math.min(100,a.total/c.objectif*100)}%"></i></div></div>
+    <div class="kpi"><span class="l">Reste à verser d'ici le ${fr(c.echeance)}</span><span class="v">${FF(a.restant)}</span><span class="s muted">dont part libre ${FF(a.libreRest)} · conseillé ${F(Math.ceil(a.rythme/50)*50)} F/sem. en plus</span></div>
+    <div class="kpi"><span class="l">Pénalités payées</span><span class="v">${FF(a.pen)}</span><span class="s muted">${a.lateCount} retard${a.lateCount>1?'s':''} · ${a.dues} semaine${a.dues>1?'s':''} due${a.dues>1?'s':''} aujourd'hui</span></div>
+    <div class="kpi"><span class="l">Dérogations utilisées</span><span class="v">${fmN} / ${c.maxFM}</span><span class="s muted">force majeure (art. 8)</span></div>
+    <div class="kpi"><span class="l">Ma part des pénalités du groupe</span><span class="v">${FF(P.partPen)}</span><span class="s muted">+ ${FF(P.partInt+P.partRoi)} d'intérêts et retours</span></div>
+  </div>
+  <div class="card"><div class="card-h"><h2>Mes semaines</h2></div>
+    <div class="legend">${Object.entries(lab).map(([k,l])=>`<span><i class="cell c-${k}"></i>${l}</span>`).join('')}</div>
+    <div class="heat"><table><tbody><tr>${wks.map(w=>{const x=mp.get(w); const st=x?x.state:'none'; return `<td><i class="cell c-${st}" title="${esc(frc(S2(w))+' · '+(x?lab[st]:'Avant adhésion')+(x&&x.pay?' · versé le '+fr(x.pay.date):''))}"></i></td>`;}).join('')}</tr></tbody></table></div>
+  </div>
+  <div class="card"><div class="card-h"><h2>Historique de mes dépôts</h2><span class="small muted">${pays.length} versements</span></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th class="n">Montant</th><th class="n">Pénalité</th><th>Observation</th></tr></thead><tbody>
+    ${pays.length?pays.map(p=>`<tr><td>${fr(p.date)}${p.heure?` <span class="small muted">${p.heure}</span>`:''}</td><td class="n">${F(p.montant)}</td><td class="n">${+p.penalite?F(p.penalite):''}</td><td class="wrap small muted">${esc(p.obs||'')}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Aucun versement.</td></tr>'}
+    </tbody><tfoot><tr><td>Total</td><td class="n">${F(a.total)}</td><td class="n">${F(a.pen)}</td><td></td></tr></tfoot></table></div>
+  </div>`;
+}
+
+// ---------- Force majeure (membre) ----------
+function vFMMembre(now){
+  const m=myMember(); if(!m) return NOLINK;
+  const c=cfg(); const mine=S.fm.filter(f=>f.membreId===m.id).sort((a,b)=>b.semaine.localeCompare(a.semaine));
+  const used=mine.filter(f=>f.statut==='validee').length;
+  const wkOpts = weeksAll().filter(w=>w>=currentWeek(now)).slice(0,8).map(w=>{ const lim=w-3; const ok = D(now.date)<lim || (D(now.date)===lim && now.heure<=c.heure); return `<option value="${S2(w)}">Samedi ${fr(S2(w))}${ok?'':' (moins de 72 h : hors délai)'}</option>`; }).join('');
+  const st={attente:['warn','En attente'],validee:['ok','Validée'],refusee:['bad','Refusée']};
+  return `
+  <div class="kpis"><div class="kpi"><span class="l">Dérogations utilisées sur le cycle</span><span class="v">${used} / ${c.maxFM}</span><span class="s">${used>=c.maxFM?pill('bad','Plus de dérogation possible'):pill('ok',(c.maxFM-used)+' restante'+(c.maxFM-used>1?'s':''))}</span></div></div>
+  <div class="card"><div class="card-h"><h2>Demander une dérogation</h2></div>
+    <p class="small muted" style="margin:0">La demande doit être faite au moins 72 h avant l'échéance du samedi ${c.heure} (art. 8). Si le groupe la valide, vous pouvez payer jusqu'au mercredi suivant sans pénalité.</p>
+    ${used>=c.maxFM?`<div class="banner warn" style="margin:0">Vous avez utilisé vos ${c.maxFM} dérogations pour ce cycle.</div>`:`
+    <form class="f" id="fFMm">
+      <label>Samedi concerné<select id="fm_w">${wkOpts}</select></label>
+      <label class="full">Motif de la demande<textarea id="fm_o" required placeholder="Expliquez brièvement la situation"></textarea></label>
+      <div class="row full"><button class="btn primary" type="submit">Envoyer ma demande</button></div>
+    </form>`}
+  </div>
+  <div class="card"><div class="card-h"><h2>Mes demandes</h2></div>
+    <div class="tbl"><table><thead><tr><th>Samedi</th><th>Demandée le</th><th>Décision</th><th>Motif</th></tr></thead><tbody>
+    ${mine.length?mine.map(f=>`<tr><td>${fr(f.semaine)}</td><td>${fr(f.dateDemande)} ${f.heureDemande||''}</td><td>${pill(...st[f.statut])}</td><td class="wrap small">${esc(f.motif||'')}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Aucune demande.</td></tr>'}
+    </tbody></table></div></div>`;
+}
+
+// ---------- Sorties & clôture (membre) ----------
+function vSortiesMembre(now){
+  const m=myMember(); if(!m) return NOLINK;
+  const c=cfg(); const a=analyse(m,null,now); const P=partsMembre(m.id,now);
+  const pen=Math.round(a.total*c.tauxSortie/100); const rest=a.total-pen;
+  const extra=P.partInt+P.partPen+P.partRoi;
+  const versDem=addMonth(now.date);
+  const ech=D(c.echeance); const late=Math.max(0,D(now.date)-ech);
+  const penClot = a.restant*(c.tauxCloture+c.tauxJour*late)/100;
+  const myRows=P.R.rows.filter(r=>r.parts[m.id]!=null);
+  return `
+  ${m.sortie?`<div class="card"><div class="card-h"><h2>Ma sortie enregistrée</h2>${m.sortie.type==='exclu'?pill('bad','Exclusion'):pill('mute','Démission')}</div>
+    <dl class="kv"><dt>Notifiée le</dt><dd>${fr(m.sortie.date)}</dd><dt>Cotisations</dt><dd>${FF(m.sortie.cotise)}</dd><dt>Pénalité ${c.tauxSortie} %</dt><dd>− ${FF(m.sortie.penalite)}</dd><dt>À restituer</dt><dd>${FF(m.sortie.restitue)}</dd><dt>Versement au plus tôt</dt><dd>${fr(m.sortie.versement)}</dd></dl></div>`:''}
+  <div class="card"><div class="card-h"><h2>Ma situation si je quittais le groupe aujourd'hui</h2></div>
+    <div class="tbl"><table><thead><tr><th></th><th class="n">Démission (art. 9)</th><th class="n">Exclusion (art. 10)</th></tr></thead><tbody>
+      <tr><td>Mes cotisations au ${fr(now.date)}</td><td class="n">${F(a.total)}</td><td class="n">${F(a.total)}</td></tr>
+      <tr><td>Pénalité de ${c.tauxSortie} %</td><td class="n">− ${F(pen)}</td><td class="n">− ${F(pen)}</td></tr>
+      <tr><td>Cotisations restituées</td><td class="n">${F(rest)}</td><td class="n">${F(rest)}</td></tr>
+      <tr><td>Intérêts et bonus (ma part ${(P.sh*100).toFixed(2)} %)</td><td class="n">${F(P.partInt)}</td><td class="n">${F(P.partInt)}</td></tr>
+      <tr><td>Pénalités du groupe qui me reviennent</td><td class="n">${F(P.partPen)}</td><td class="n">${F(P.partPen)}</td></tr>
+      <tr><td>Retour sur investissement</td><td class="n">${F(P.partRoi)}</td><td class="n">${F(P.partRoi)}</td></tr>
+    </tbody><tfoot><tr><td>Total à recevoir</td><td class="n">${F(rest+extra)}</td><td class="n">${F(rest+extra)}</td></tr>
+      <tr><td>Versement au plus tôt</td><td class="n">${fr(versDem)}</td><td class="n">après décision unanime</td></tr></tfoot></table></div>
+    <p class="small muted" style="margin:0">Estimation indicative : le versement des intérêts, des pénalités et des retours sur investissement à un membre sortant reste soumis à la décision du groupe.${P.invest>P.retour?` Investissements en cours : ${FF(P.invest)} engagés, ${FF(P.retour)} déjà revenus.`:''}</p>
+  </div>
+  <div class="card"><div class="card-h"><h2>Ma situation à la clôture du ${fr(c.echeance)}</h2></div>
+    <dl class="kv"><dt>Objectif</dt><dd>${FF(c.objectif)}</dd><dt>Déjà versé</dt><dd>${FF(a.total)}</dd><dt>Reste à verser</dt><dd>${FF(a.restant)}</dd>
+      <dt>Si non soldé à la clôture</dt><dd>pénalité de ${c.tauxCloture} % (${FF(a.restant*c.tauxCloture/100)}) + ${c.tauxJour} % par jour de retard</dd>
+      <dt>À recevoir en plus de mes cotisations</dt><dd>${FF(extra)} à ce jour</dd></dl>
+  </div>
+  <div class="card"><div class="card-h"><h2>Répartition de chaque pénalité</h2><span class="small muted">ma part : ${F(P.partPen)} F sur ${FF(P.R.total)}</span></div>
+    <p class="small muted" style="margin:0">Chaque pénalité est partagée au prorata des cotisations de chacun à la date où elle est payée.</p>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Payée par</th><th class="n">Pénalité</th><th class="n">Mes cotisations à cette date</th><th class="n">Base du groupe</th><th class="n">Ma part</th></tr></thead><tbody>
+    ${myRows.length?myRows.map(r=>`<tr><td>${fr(r.p.date)}</td><td>${esc(memById(r.p.membreId)?.nom||'?')}</td><td class="n">${F(r.p.penalite)}</td><td class="n">${F(r.base[m.id])}</td><td class="n">${F(r.tot)}</td><td class="n">${r.parts[m.id].toFixed(2).replace('.',',')}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Aucune pénalité partagée pour l’instant.</td></tr>'}
+    </tbody></table></div></div>
+  <div class="card"><div class="card-h"><h2>Retour sur investissement</h2></div>
+    <dl class="kv"><dt>Montants investis</dt><dd>${FF(P.invest)}</dd><dt>Montants revenus</dt><dd>${FF(P.retour)}</dd><dt>Bénéfice net du groupe</dt><dd>${FF(P.benef)}</dd><dt>Ma part (${(P.sh*100).toFixed(2)} %)</dt><dd>${FF(P.partRoi)}</dd></dl>
+  </div>`;
+}
 
 // ---------- Votes en ligne ----------
 const CHOIX={pour:['ok','Pour'],contre:['bad','Contre'],abst:['mute','Abstention']};
@@ -405,6 +529,7 @@ function vVotes(now){
         <div class="tbl"><table><tbody>${actifs().map(m=>{const v=byM.get(m.id); return `<tr><td>${esc(m.nom)}</td><td>${v?pill(...CHOIX[v.choix]):pill('mute','Pas encore voté')}</td><td class="small muted">${v?fr(String(v.date).slice(0,10))+' '+String(v.date).slice(11,16):''}</td></tr>`;}).join('')}</tbody></table></div></details>
       ${sc.statut==='ouvert'?`<div class="row w-only">
         <button class="btn" data-act="copyScrutin" data-id="${sc.id}">Copier l'annonce WhatsApp</button>
+        ${S.confirm==='suppr'+sc.id?`<span class="confirm">Supprimer ce vote ouvert par erreur ? Il disparaîtra pour tous les membres. <button class="btn sm danger" data-act="supprScrutin" data-id="${sc.id}">Oui, supprimer</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn danger" data-act="askSuppr" data-id="${sc.id}">Supprimer ce vote</button>`}
         ${S.confirm==='clos'+sc.id?`<span class="confirm">Clôturer maintenant ? Résultat : ${r.adopte?'adopté':'rejeté'}. <button class="btn sm danger" data-act="cloreScrutin" data-id="${sc.id}">Oui, clôturer</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn primary" data-act="askClos" data-id="${sc.id}">Clôturer le vote</button>`}
       </div>`:''}
     </div>`;
@@ -452,7 +577,7 @@ function vDash(now){
     <div class="card">
       <div class="card-h"><h2>Semaine du samedi ${fr(S2(lw))}</h2>${enRetard.length?pill('warn',enRetard.length+' en retard'):pill('ok','Tout le monde est à jour')}</div>
       ${enRetard.length?`<table><thead><tr><th>Membre</th><th class="n">Semaines dues</th><th>Délai</th></tr></thead><tbody>${enRetard.map(({m,a})=>`<tr><td>${esc(m.nom)}</td><td class="n">${a.dues}</td><td>${a.manq?pill('bad','Délai du mercredi dépassé'):pill('warn','Régulariser avant mer. '+frc(S2(lw+4)))}</td></tr>`).join('')}</tbody></table>`:`<p class="muted small">Toutes les cotisations obligatoires échues sont versées.</p>`}
-      <div class="row"><button class="btn" data-act="goto" data-tab="cots">Préparer le message WhatsApp</button></div>
+      <div class="row w-only"><button class="btn" data-act="goto" data-tab="cots">Préparer le message WhatsApp</button></div>
     </div>
     <div class="card">
       <div class="card-h"><h2>Part libre (${FF(c.objectif - c.semaines*c.cotisation)} par membre)</h2></div>
@@ -494,10 +619,11 @@ function vCots(now){
       <label>Membre<select id="c_m">${memOpts(ed?.membreId)}</select></label>
       <label>Date du versement<input type="date" id="c_d" value="${ed?.date||now.date}"></label>
       <label>Heure<input type="time" id="c_h" value="${ed?.heure||now.heure}"></label>
-      <label>Montant (F)<input type="number" min="0" step="50" id="c_a" value="${ed?.montant??c.cotisation}"></label>
+      <label>Montant (F)<input type="number" step="50" id="c_a" value="${ed?.montant??c.cotisation}"></label>
       <label>Pénalité (F)<input type="number" min="0" step="10" id="c_p" value="${ed?.penalite??0}"></label>
       <label class="full">Observation<input id="c_o" value="${esc(ed?.obs||'')}" placeholder="Ex. capture reçue le 20/09 à 2h22"></label>
       <div class="hint full" id="c_hint"></div>
+      <p class="small muted full" style="margin:0">Un versement peut être modifié ou supprimé pendant 24 h, puis il est verrouillé. Pour corriger une erreur ancienne, enregistrez un montant négatif avec une observation (écriture de correction).</p>
       <div class="row full"><button class="btn primary" type="submit">${ed?'Enregistrer les modifications':'Enregistrer le versement'}</button></div>
     </form>
   </div>
@@ -522,7 +648,7 @@ function vCots(now){
     <div class="card-h"><h2>Journal des versements</h2>
       <select id="c_f" style="width:auto" data-keep="0"><option value="">Tous les membres</option>${memOpts(S.filtre, comptes())}</select></div>
     <div class="tbl"><table><thead><tr><th>Date</th><th>Membre</th><th class="n">Montant</th><th class="n">Pénalité</th><th>Observation</th><th class="w-only"></th></tr></thead><tbody>
-    ${list.length?list.map(p=>`<tr><td>${fr(p.date)}${p.heure?` <span class="muted small">${p.heure}</span>`:''}</td><td>${esc(memById(p.membreId)?.nom||'?')}</td><td class="n">${F(p.montant)}</td><td class="n">${+p.penalite?F(p.penalite):''}</td><td class="wrap small muted">${esc(p.obs||'')}</td><td class="w-only">${S.confirm===p.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delCot" data-id="${p.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<div class="row"><button class="btn sm" data-act="editCot" data-id="${p.id}">Modifier</button><button class="btn sm danger" data-act="askDel" data-id="${p.id}">Supprimer</button></div>`}</td></tr>`).join(''):`<tr><td colspan="6" class="empty">Aucun versement enregistré.</td></tr>`}
+    ${list.length?list.map(p=>`<tr><td>${fr(p.date)}${p.heure?` <span class="muted small">${p.heure}</span>`:''}</td><td>${esc(memById(p.membreId)?.nom||'?')}</td><td class="n">${F(p.montant)}</td><td class="n">${+p.penalite?F(p.penalite):''}</td><td class="wrap small muted">${esc(p.obs||'')}</td><td class="w-only">${S.confirm===p.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delCot" data-id="${p.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:(editable(p)?`<div class="row"><button class="btn sm" data-act="editCot" data-id="${p.id}">Modifier</button><button class="btn sm danger" data-act="askDel" data-id="${p.id}">Supprimer</button><span class="small muted">${lockLeft(p)}</span></div>`:LOCK)}</td></tr>`).join(''):`<tr><td colspan="6" class="empty">Aucun versement enregistré.</td></tr>`}
     </tbody><tfoot><tr><td colspan="2">${list.length} versements</td><td class="n">${F(list.reduce((s,p)=>s+(+p.montant||0),0))}</td><td class="n">${F(list.reduce((s,p)=>s+(+p.penalite||0),0))}</td><td colspan="2"></td></tr></tfoot></table></div>
   </div>`;
 }
@@ -610,7 +736,7 @@ function vFM(now){
     <div class="tbl"><table><thead><tr><th>Samedi</th><th>Membre</th><th>Demandée le</th><th>Délai 72 h</th><th>Décision</th><th>Motif</th><th class="w-only"></th></tr></thead><tbody>
     ${list.length?list.map(f=>{ const lim=D(f.semaine)-3; const inTime = D(f.dateDemande)<lim || (D(f.dateDemande)===lim && (f.heureDemande||'00:00')<=c.heure);
       const st={attente:['warn','En attente'],validee:['ok','Validée'],refusee:['bad','Refusée']}[f.statut];
-      return `<tr><td>${fr(f.semaine)}</td><td>${esc(memById(f.membreId)?.nom||'?')}</td><td>${fr(f.dateDemande)} ${f.heureDemande||''}</td><td>${inTime?pill('ok','Respecté'):pill('bad','Hors délai')}</td><td>${pill(...st)}</td><td class="wrap small">${esc(f.motif||'')}</td><td class="w-only"><div class="row">${f.statut!=='validee'?`<button class="btn sm" data-act="fmSet" data-id="${f.id}" data-s="validee">Valider</button>`:''}${f.statut!=='refusee'?`<button class="btn sm" data-act="fmSet" data-id="${f.id}" data-s="refusee">Refuser</button>`:''}<button class="btn sm danger" data-act="delFM" data-id="${f.id}">Supprimer</button></div></td></tr>`;}).join(''):`<tr><td colspan="7" class="empty">Aucune demande de force majeure.</td></tr>`}
+      return `<tr><td>${fr(f.semaine)}</td><td>${esc(memById(f.membreId)?.nom||'?')}</td><td>${fr(f.dateDemande)} ${f.heureDemande||''}</td><td>${inTime?pill('ok','Respecté'):pill('bad','Hors délai')}</td><td>${pill(...st)}</td><td class="wrap small">${esc(f.motif||'')}</td><td class="w-only">${fmEditable(f)?`<div class="row">${f.statut!=='validee'?`<button class="btn sm" data-act="fmSet" data-id="${f.id}" data-s="validee">Valider</button>`:''}${f.statut!=='refusee'?`<button class="btn sm" data-act="fmSet" data-id="${f.id}" data-s="refusee">Refuser</button>`:''}<button class="btn sm danger" data-act="delFM" data-id="${f.id}">Supprimer</button></div>`:LOCK}</td></tr>`;}).join(''):`<tr><td colspan="7" class="empty">Aucune demande de force majeure.</td></tr>`}
     </tbody></table></div></div>`;
 }
 
@@ -654,7 +780,7 @@ function vTres(now){
     </form></div>
   <div class="card"><div class="card-h"><h2>Mouvements hors cotisations</h2></div>
     <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Libellé</th><th class="n">Montant</th><th>Accord</th><th class="w-only"></th></tr></thead><tbody>
-    ${list.length?list.map(t=>{const T=TRES_TYPES[t.type]||{l:t.type,sign:0}; return `<tr><td>${fr(t.date)}</td><td>${T.sign>0?pill('ok',T.l):pill('warn',T.l)}</td><td class="wrap">${esc(t.libelle||'')}</td><td class="n">${T.sign<0?'−':''}${F(t.montant)}</td><td class="wrap small">${T.sign<0?(t.accord?esc(t.accord):pill('bad','Accord manquant')):''}</td><td class="w-only">${S.confirm===t.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delTres" data-id="${t.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn sm danger" data-act="askDel" data-id="${t.id}">Supprimer</button>`}</td></tr>`;}).join(''):`<tr><td colspan="6" class="empty">Aucun mouvement : intérêts MoMo, frais ou investissements apparaîtront ici.</td></tr>`}
+    ${list.length?list.map(t=>{const T=TRES_TYPES[t.type]||{l:t.type,sign:0}; return `<tr><td>${fr(t.date)}</td><td>${T.sign>0?pill('ok',T.l):pill('warn',T.l)}</td><td class="wrap">${esc(t.libelle||'')}</td><td class="n">${T.sign<0?'−':''}${F(t.montant)}</td><td class="wrap small">${T.sign<0?(t.accord?esc(t.accord):pill('bad','Accord manquant')):''}</td><td class="w-only">${S.confirm===t.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delTres" data-id="${t.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:(editable(t)?`<button class="btn sm danger" data-act="askDel" data-id="${t.id}">Supprimer</button> <span class="small muted">${lockLeft(t)}</span>`:LOCK)}</td></tr>`;}).join(''):`<tr><td colspan="6" class="empty">Aucun mouvement : intérêts MoMo, frais ou investissements apparaîtront ici.</td></tr>`}
     </tbody></table></div></div>`;
 }
 
@@ -678,7 +804,7 @@ function vDecs(now){
   <div class="card"><div class="card-h"><h2>Registre des décisions et réunions</h2></div>
     <div class="tbl"><table><thead><tr><th>Date</th><th>Type</th><th>Objet</th><th>Résultat</th><th>Votes</th><th>Responsable</th><th class="w-only"></th></tr></thead><tbody>
     ${list.length?list.map(d=>{ const vs=Object.values(d.votes||{}); const p=vs.filter(x=>x==='pour').length, cn=vs.filter(x=>x==='contre').length, ab=vs.filter(x=>x==='abst').length;
-      return `<tr><td>${fr(d.date)}</td><td>${pill('info',d.type||'')}</td><td class="wrap">${esc(d.objet)}</td><td class="wrap">${esc(d.resultat||'')}</td><td class="small">${vs.length?`${p} pour · ${cn} contre · ${ab} abst.`:''}</td><td class="small">${esc(d.responsable||'')}${d.lien?`<br><span class="muted">${esc(d.lien)}</span>`:''}</td><td class="w-only">${S.confirm===d.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delDec" data-id="${d.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn sm danger" data-act="askDel" data-id="${d.id}">Supprimer</button>`}</td></tr>`;}).join(''):`<tr><td colspan="7" class="empty">Aucune décision enregistrée.</td></tr>`}
+      return `<tr><td>${fr(d.date)}</td><td>${pill('info',d.type||'')}</td><td class="wrap">${esc(d.objet)}</td><td class="wrap">${esc(d.resultat||'')}</td><td class="small">${vs.length?`${p} pour · ${cn} contre · ${ab} abst.`:''}</td><td class="small">${esc(d.responsable||'')}${d.lien?`<br><span class="muted">${esc(d.lien)}</span>`:''}</td><td class="w-only">${S.confirm===d.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delDec" data-id="${d.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:(editable(d)?`<button class="btn sm danger" data-act="askDel" data-id="${d.id}">Supprimer</button> <span class="small muted">${lockLeft(d)}</span>`:LOCK)}</td></tr>`;}).join(''):`<tr><td colspan="7" class="empty">Aucune décision enregistrée.</td></tr>`}
     </tbody></table></div></div>`;
 }
 
@@ -810,13 +936,13 @@ async function importJson(file){
   let d; try{ d=JSON.parse(await file.text()); }catch(_){ toast('Fichier illisible.'); return; }
   const map={membres:'membres',cotisations:'cotisations',forcemajeure:'forcemajeure',tresorerie:'tresorerie',decisions:'decisions'};
   const writes=[]; if(d.config) writes.push(['adf','config',d.config]);
-  for(const [k,col] of Object.entries(map)) for(const o of (d[k]||[])){ const c={...o}; const id=c.id; delete c.id; if(id) writes.push([col,id,c]); }
+  for(const [k,col] of Object.entries(map)) for(const o of (d[k]||[])){ const c={...o}; const id=c.id; delete c.id; if(LOCKED_COLS.includes(col)){ c.creeLe=SV(); if(col==='forcemajeure' && c.statut!=='attente') c.decideLe=SV(); else delete c.decideLe; } if(id) writes.push([col,id,c]); }
   for(const sc of (d.scrutins||[])){ const c={...sc}; const id=c.id; const vs=c.votes||[]; delete c.id; delete c.votes; if(!id) continue; writes.push(['scrutins',id,c]); /* les bulletins individuels ne sont pas réimportés : seul chaque membre peut écrire son vote */ }
   if(!writes.length){ toast('Aucune donnée dans ce fichier.'); return; }
   try{
     for(let i=0;i<writes.length;i+=400){ const b=db.batch(); for(const [col,id,data] of writes.slice(i,i+400)) b.set(db.collection(col).doc(id),data); await b.commit(); }
     toast(`${writes.length} enregistrements importés.`);
-  }catch(e){ toast(e?.code==='permission-denied'?"Import refusé : réservé au bureau.":'Import interrompu, réessayez.'); }
+  }catch(e){ toast(e?.code==='permission-denied'?"Import refusé : réservé au bureau, et impossible sur des enregistrements déjà présents et verrouillés.":'Import interrompu, réessayez.'); }
 }
 
 // ---------- événements ----------
@@ -840,6 +966,8 @@ document.addEventListener('click', async e=>{
     return;
   }
   if(a==='askClos'){ S.confirm='clos'+id; render(); return; }
+  if(a==='askSuppr'){ S.confirm='suppr'+id; render(); return; }
+  if(a==='supprScrutin'){ S.confirm=null; try{ await db.collection('scrutins').doc(id).delete(); toast('Vote supprimé.'); }catch(e){ toast(e?.code==='permission-denied'?'Suppression réservée au bureau.':'Suppression impossible, réessayez.'); } return; }
   if(a==='cloreScrutin'){
     S.confirm=null; const sc=S.scrutins.find(x=>x.id===id); if(!sc) return;
     const r=resultatScrutin(sc); const n=nowLocal(); const d=n.date+'T'+n.heure;
@@ -861,7 +989,7 @@ document.addEventListener('click', async e=>{
   if(a==='cancelEdit'){ S.editCot=null; render(); return; }
   if(a==='editMem'){ S.editMem=id; render(); window.scrollTo({top:0,behavior:'smooth'}); return; }
   if(a==='cancelMem'){ S.editMem=null; render(); return; }
-  if(a==='fmSet'){ const f=S.fm.find(x=>x.id===id); if(f && t.dataset.s==='validee'){ const n=S.fm.filter(x=>x.membreId===f.membreId&&x.statut==='validee').length; if(n>=cfg().maxFM){ toast('Ce membre a déjà utilisé ses '+cfg().maxFM+' dérogations.'); return; } } await upd(COLS.fm,id,{statut:t.dataset.s}); return; }
+  if(a==='fmSet'){ const f=S.fm.find(x=>x.id===id); if(f && t.dataset.s==='validee'){ const n=S.fm.filter(x=>x.membreId===f.membreId&&x.statut==='validee').length; if(n>=cfg().maxFM){ toast('Ce membre a déjà utilisé ses '+cfg().maxFM+' dérogations.'); return; } } const wasPending=f?.statut==='attente'; await upd(COLS.fm,id, wasPending?{statut:t.dataset.s, decideLe:SV()}:{statut:t.dataset.s}); return; }
   if(a==='copyMsg'){ const txt=document.getElementById('w_msg').textContent; try{ await navigator.clipboard.writeText(txt); toast('Message copié. Collez-le dans le groupe WhatsApp.'); }catch(_){ const r=document.createRange(); r.selectNodeContents(document.getElementById('w_msg')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Texte sélectionné : copiez-le avec votre clavier.'); } return; }
 });
 document.addEventListener('input', e=>{
@@ -894,6 +1022,14 @@ document.addEventListener('submit', async e=>{
     }catch(err){ toast(AUTH_ERR[err.code]||'Connexion impossible.'); }
     return;
   }
+  if(f==='fFMm'){
+    const m=myMember(); if(!m){ toast('Compte non relié.'); return; }
+    const n=nowLocal(); const d={membreId:m.id, semaine:v('fm_w'), dateDemande:n.date, heureDemande:n.heure, statut:'attente', motif:v('fm_o'), parUid:S.user.uid, creeLe:SV()};
+    if(!d.motif){ toast('Indiquez le motif.'); return; }
+    try{ await db.collection(COLS.fm).doc().set(d); toast('Demande envoyée au bureau.'); render(); }
+    catch(e){ toast(e?.code==='permission-denied'?'Demande refusée : compte non relié à votre fiche.':'Envoi impossible, réessayez.'); }
+    return;
+  }
   if(f==='fScr'){
     const ld=v('sv_ld'), lh=v('sv_lh')||'20:00';
     const d={objet:v('sv_o'), description:v('sv_d'), regle:v('sv_r'), limite: ld?ld+'T'+lh:'', statut:'ouvert', ouvert:nowLocal().date+'T'+nowLocal().heure, creePar:S.user.uid};
@@ -903,7 +1039,8 @@ document.addEventListener('submit', async e=>{
   }
   if(f==='fCot'){
     const d={membreId:v('c_m'), date:v('c_d'), heure:v('c_h'), montant:+v('c_a')||0, penalite:+v('c_p')||0, obs:v('c_o')};
-    if(!d.membreId||!d.date||d.montant<=0){ toast('Indiquez le membre, la date et un montant.'); return; }
+    if(!d.membreId||!d.date||!d.montant){ toast('Indiquez le membre, la date et un montant.'); return; }
+    if(d.montant<0 && !d.obs){ toast("Une correction (montant négatif) doit être expliquée dans l'observation."); return; }
     if(S.editCot){ const old=S.cots.find(p=>p.id===S.editCot); d.cree=old?.cree||stamp(); if(await save(COLS.cots,S.editCot,d)){ S.editCot=null; toast('Versement modifié.'); render(); } }
     else { d.cree=stamp(); if(await save(COLS.cots,null,d)){ toast(`Versement de ${FF(d.montant)} enregistré pour ${memById(d.membreId).nom}.`); const a=document.getElementById('c_a'); if(a) a.value=c.cotisation; const o=document.getElementById('c_o'); if(o) o.value=''; const p=document.getElementById('c_p'); if(p){p.dataset.touched='';} updHint(); } }
   }
@@ -917,6 +1054,7 @@ document.addEventListener('submit', async e=>{
   if(f==='fFM'){
     const d={membreId:v('f_m'), semaine:v('f_w'), dateDemande:v('f_d'), heureDemande:v('f_h'), statut:v('f_s'), motif:v('f_o')};
     if(d.statut==='validee'){ const n=S.fm.filter(x=>x.membreId===d.membreId&&x.statut==='validee').length; if(n>=c.maxFM){ toast('Ce membre a déjà utilisé ses '+c.maxFM+' dérogations.'); return; } }
+    if(d.statut!=='attente') d.decideLe=SV();
     if(await save(COLS.fm,null,d)) toast('Demande enregistrée.');
   }
   if(f==='fTres'){
