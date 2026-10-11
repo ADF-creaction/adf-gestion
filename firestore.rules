@@ -54,6 +54,23 @@ service cloud.firestore {
       allow delete: if isBureau() && within24h(resource.data.creeLe);
     }
 
+    // Amendes (capture en retard, absences) : créées par le bureau, modifiables 24 h ;
+    // ensuite seul l'encaissement reste possible, puis il est verrouillé 24 h après.
+    match /amendes/{doc} {
+      allow read: if isMembre();
+      allow create: if isBureau() && createdNow()
+        && (request.resource.data.payee == false || request.resource.data.payeLe == request.time);
+      allow update: if isBureau() && keepsCreation() && (
+          (resource.data.payee == false && request.resource.data.payee == false && within24h(resource.data.creeLe))
+          || (resource.data.payee == false && request.resource.data.payee == true
+              && request.resource.data.payeLe == request.time
+              && request.resource.data.montant == resource.data.montant
+              && request.resource.data.membreId == resource.data.membreId)
+          || (resource.data.payee == true && within24h(resource.data.payeLe)
+              && request.resource.data.payeLe == resource.data.payeLe));
+      allow delete: if isBureau() && resource.data.payee == false && within24h(resource.data.creeLe);
+    }
+
     // Force majeure : un membre dépose sa propre demande ; le bureau décide,
     // puis la décision est verrouillée 24 h après avoir été prise.
     match /forcemajeure/{doc} {
