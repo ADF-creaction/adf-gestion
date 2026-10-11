@@ -1,17 +1,60 @@
 {
+  "id": "/adf-gestion/",
   "name": "ADF Gestion",
   "short_name": "ADF",
-  "description": "Gestion des cotisations du groupement ADF",
+  "description": "Gestion des cotisations, pénalités, votes et décisions du groupement ADF (Apporteur de financement).",
   "lang": "fr",
-  "start_url": "./",
-  "scope": "./",
+  "dir": "ltr",
+  "start_url": "/adf-gestion/",
+  "scope": "/adf-gestion/",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "any",
   "background_color": "#f3f5f7",
-  "theme_color": "#1f3a52",
+  "theme_color": "#0e2e4d",
+  "categories": [
+    "finance",
+    "productivity",
+    "business"
+  ],
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "img/screenshot-mobile.png",
+      "sizes": "1082x2402",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Connexion à l'application ADF"
+    },
+    {
+      "src": "img/screenshot-wide.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Connexion à l'application ADF sur ordinateur"
+    }
   ]
 }
