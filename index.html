@@ -6,8 +6,8 @@
 <title>ADF Gestion</title>
 <meta name="theme-color" content="#0e2e4d">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -138,7 +138,7 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-weight:600}
 <div class="wrap" id="app">
   <header class="top">
     <div class="brand">
-      <div class="mark"><img src="img/logo-mark.png" alt="Logo ADF"></div>
+      <div class="mark"><img src="logo-mark.png" alt="Logo ADF"></div>
       <div><h1>Groupement ADF</h1><p>Apporteur de financement · cycle 2026–2027</p></div>
     </div>
     <div class="row"><div class="weekbox" id="weekbox"></div><button class="btn" id="btnExport" hidden>Exporter en Excel</button></div>
@@ -154,9 +154,9 @@ dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;font-weight:600}
 (() => {
 'use strict';
 // ---------- état ----------
-const S = { auth:'loading', user:null, role:null, roles:[], myMembreId:null, scrutins:[], votes:{}, authMode:'login', cfg:null, membres:[], cots:[], fm:[], tres:[], decs:[], ready:{}, canWrite:false, dbOk:null, tab:'dash', filtre:'', editCot:null, confirm:null, simDate:null, redist:null, semMsg:null };
+const S = { auth:'loading', user:null, role:null, roles:[], myMembreId:null, scrutins:[], votes:{}, authMode:'login', cfg:null, membres:[], cots:[], fm:[], tres:[], decs:[], amendes:[], ready:{}, canWrite:false, dbOk:null, tab:'dash', filtre:'', editCot:null, confirm:null, simDate:null, redist:null, semMsg:null };
 let db = null;
-const DEF = { cotisation:1000, objectif:100000, debut:'2026-08-15', semaines:52, echeance:'2027-08-31', heure:'17:00', tauxRetard:5, tauxSortie:20, tauxCloture:10, tauxJour:1, maxFM:3, bureau:{president:'',tresorier:'',secretaire:''}, sim:{titulaire:'FADONOUGBO Florent', code:'KODJO Apolinaire', garde:'GANGBALA Donatien'}, releve:null };
+const DEF = { cotisation:1000, objectif:100000, debut:'2026-08-15', semaines:52, echeance:'2027-08-31', heure:'17:00', tauxRetard:5, tauxSortie:20, tauxCloture:10, tauxJour:1, maxFM:3, penCapture:500, heureCapture:'23:59', penAbsence:500, penAbsence2:1000, modeleWA:null, bureau:{tresorier:'',recouvrement:'',secretaire:'',moderateur:''}, sim:{titulaire:'FADONOUGBO Florent', code:'KODJO Apolinaire', garde:'GANGBALA Donatien'}, releve:null };
 const cfg = () => Object.assign({}, DEF, S.cfg||{});
 
 // ---------- dates ----------
@@ -204,6 +204,7 @@ function analyse(m, extra, now){
     for(const x of wk){ if(x.w>cur) break; if(x.pay) continue; if(amt<c.cotisation) break; x.pay=p; amt-=c.cotisation; if(p===extra) news.push(x); }
     libre+=amt;
   }
+  const AM=amendesOf(m.id); pen+=AM.payees;
   let dues=0, lateCount=0, manq=0, fmUsed=0;
   for(const x of wk){
     const fm=fmValid(m.id,x.w); if(fm) fmUsed++;
@@ -227,17 +228,25 @@ function analyse(m, extra, now){
   const libreCible = Math.max(0,c.objectif-oblig);
   const libreRest = Math.max(0, restant-obligRest);
   let statut='ok'; if(dues>0) statut = manq>0?'bad':'warn';
-  return {wk,total,libre,pen,dues,lateCount,manq,fmUsed,oblig,obligCouvert,restant,libreCible,libreRest,rythme:libreRest/semRest,semRest,statut,news};
+  return {wk,total,libre,pen,amDues:AM.dues,dues,lateCount,manq,fmUsed,oblig,obligCouvert,restant,libreCible,libreRest,rythme:libreRest/semRest,semRest,statut,news};
 }
 
+const AMENDE_TYPES={capture:'Capture d’écran envoyée en retard (rés. 4)', absence:'Absence non justifiée à une réunion (rés. 2)', absence2:'Absence à deux réunions successives (rés. 3)', autre:'Autre pénalité'};
+function amendeMontant(type){ const c=cfg(); return type==='capture'?c.penCapture:type==='absence'?c.penAbsence:type==='absence2'?c.penAbsence2:0; }
+const amPayees = () => (S.amendes||[]).filter(a=>a.payee);
+function amendesOf(mid){ const l=(S.amendes||[]).filter(a=>a.membreId===mid); return {l, dues:l.filter(a=>!a.payee).reduce((s,a)=>s+(+a.montant||0),0), payees:l.filter(a=>a.payee).reduce((s,a)=>s+(+a.montant||0),0)}; }
+function amendeEditable(a){ const m=tsMs(a.payee?a.payeLe:a.creeLe); return m!=null && Date.now()-m < H24; }
+function penalitesEncaissees(){ return S.cots.reduce((s,p)=>s+(+p.penalite||0),0) + amPayees().reduce((s,a)=>s+(+a.montant||0),0); }
 function soldeTheorique(){
   let s=0; for(const p of S.cots) s+=(+p.montant||0)+(+p.penalite||0);
+  for(const a of amPayees()) s+=(+a.montant||0);
   for(const t of S.tres) s+= TRES_TYPES[t.type]?.sign*(+t.montant||0) || 0;
   return s;
 }
 // Chaque pénalité est répartie entre les membres au prorata de leurs cotisations cumulées à la date où elle est payée
 function repartPenalites(){
-  const pens = S.cots.filter(p=>+p.penalite>0).sort(payOrder);
+  const pens = S.cots.filter(p=>+p.penalite>0).map(p=>({date:p.date, heure:p.heure, cree:p.cree, membreId:p.membreId, penalite:+p.penalite, motif:'Retard de versement'}))
+    .concat(amPayees().map(a=>({date:a.payeDate||a.date, heure:'', cree:'', membreId:a.membreId, penalite:+a.montant, motif:AMENDE_TYPES[a.type]||a.motif||'Amende'}))).sort(payOrder);
   const pool = S.membres.filter(m=>m.statut!=='candidat');
   const parM = Object.fromEntries(pool.map(m=>[m.id,0]));
   const rows = pens.map(p=>{
@@ -258,7 +267,7 @@ const TRES_TYPES = {
 };
 
 // ---------- db ----------
-const COLS = { membres:'membres', cots:'cotisations', fm:'forcemajeure', tres:'tresorerie', decs:'decisions' };
+const COLS = { membres:'membres', cots:'cotisations', fm:'forcemajeure', tres:'tresorerie', decs:'decisions', amendes:'amendes' };
 let fbAuth=null, unsubs=[];
 async function boot(){
   const conf = window.ADF_FIREBASE_CONFIG;
@@ -304,14 +313,14 @@ let raf=0; function schedule(){ if(raf) return; raf=requestAnimationFrame(()=>{r
 async function save(col, id, data){
   if(!S.canWrite){ toast('Consultation seule : modification impossible.'); return false; }
   try{
-    if(LOCKED_COLS.includes(col)){ const old = id ? localDoc(col,id) : null; data = Object.assign({}, data, { creeLe: old && old.creeLe ? old.creeLe : SV() }); if(old && !editable(old) && col!=='forcemajeure'){ toast('Enregistrement verrouillé : plus de 24 h.'); return false; } }
+    if(LOCKED_COLS.includes(col)){ const old = id ? localDoc(col,id) : null; data = Object.assign({}, data, { creeLe: old && old.creeLe ? old.creeLe : SV() }); if(old && !editable(old) && col!=='forcemajeure' && col!=='amendes'){ toast('Enregistrement verrouillé : plus de 24 h.'); return false; } }
     const ref = id ? db.collection(col).doc(id) : db.collection(col).doc(); await ref.set(data); return true; }
   catch(e){ if(e?.code==='permission-denied'){ S.canWrite=false; render(); toast("Vous n'avez pas le droit de modifier ces données."); } else toast('Enregistrement impossible, réessayez.'); return false; }
 }
 async function upd(col,id,data){ try{ await db.collection(col).doc(id).update(data); return true;}catch(e){ toast(e?.code==='permission-denied'?'Modification refusée : enregistrement verrouillé ou droits insuffisants.':'Mise à jour impossible.'); return false; } }
 async function del(col,id){ try{ await db.collection(col).doc(id).delete(); toast('Supprimé.'); }catch(e){ toast(e?.code==='permission-denied'?'Suppression refusée : enregistrement verrouillé après 24 h.':'Suppression impossible.'); } }
 const stamp = () => new Date().toISOString();
-const LOCKED_COLS = ['cotisations','tresorerie','decisions','forcemajeure'];
+const LOCKED_COLS = ['cotisations','tresorerie','decisions','forcemajeure','amendes'];
 const H24 = 24*3600*1000;
 const SV = () => firebase.firestore.FieldValue.serverTimestamp();
 const tsMs = t => t && typeof t.toMillis==='function' ? t.toMillis() : (t && t.seconds ? t.seconds*1000 : null);
@@ -330,7 +339,7 @@ const memOpts = (sel, list) => (list||actifs()).map(m=>`<option value="${m.id}" 
 function v(id){ return document.getElementById(id)?.value?.trim() ?? ''; }
 
 const TABS_MEMBRE = ['moi','dash','votes','fm','decs','sorties'];
-const TABS = [['moi','Mon espace'],['dash','Tableau de bord'],['votes','Votes'],['cots','Cotisations'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
+const TABS = [['moi','Mon espace'],['dash','Tableau de bord'],['votes','Votes'],['cots','Cotisations'],['amendes','Amendes'],['membres','Membres'],['fm','Force majeure'],['tres','Trésorerie'],['decs','Décisions & réunions'],['sorties','Sorties & clôture'],['params','Paramètres']];
 
 function render(keep){
   const app=document.getElementById('app');
@@ -357,7 +366,7 @@ function render(keep){
   if(S.auth!=='ok'){ main.innerHTML=vAuth(); return; }
   if(!(S.ready.membres && S.ready.cots)){ main.innerHTML='<div class="empty">Chargement des données du groupement…</div>'; return; }
   if(S.membres.length===0 && S.tab!=='params' && S.tab!=='membres'){ main.innerHTML=`<div class="card empty">Aucun membre enregistré pour l'instant. Commencez par l'onglet <b>Membres</b> pour ajouter les adhérents.</div>`; return; }
-  const fn = {moi:vMoi,dash:vDash,votes:vVotes,cots:vCots,membres:vMembres,fm:S.canWrite?vFM:vFMMembre,tres:vTres,decs:vDecs,sorties:S.canWrite?vSorties:vSortiesMembre,params:vParams}[S.tab];
+  const fn = {moi:vMoi,dash:vDash,votes:vVotes,cots:vCots,amendes:vAmendes,membres:vMembres,fm:S.canWrite?vFM:vFMMembre,tres:vTres,decs:vDecs,sorties:S.canWrite?vSorties:vSortiesMembre,params:vParams}[S.tab];
   const ae=document.activeElement?.id; const vals={}; main.querySelectorAll('input,select,textarea').forEach(el=>{ if(el.id) vals[el.id]=el.value; });
   main.innerHTML = `<section class="panel">${fn(now)}</section>`;
   // conserver la saisie en cours lors des rafraîchissements en direct
@@ -374,7 +383,7 @@ function vAuth(){
   if(S.auth==='verify') return `<div class="auth"><div class="card"><h2>Vérifiez votre adresse e-mail</h2><p class="small">Un lien de confirmation a été envoyé à <b>${esc(S.user.email)}</b>. Cliquez dessus, puis revenez ici.</p><div class="row"><button class="btn primary" data-act="reloadUser">J'ai confirmé</button><button class="btn" data-act="resendVerif">Renvoyer le lien</button></div></div></div>`;
   if(S.auth==='attente') return `<div class="auth"><div class="card"><h2>Compte en attente</h2><p class="small">Votre compte <b>${esc(S.user.email)}</b> est créé. Un membre du bureau doit maintenant vous donner accès dans Paramètres → Accès des membres.</p><div class="row"><button class="btn" data-act="reloadUser">Vérifier à nouveau</button></div></div></div>`;
   const reg = S.authMode==='register';
-  return `<div class="auth"><div class="logo-tile"><img src="img/logo-full.png" alt="ADF, Apporteur de financement"></div><div class="card">
+  return `<div class="auth"><div class="logo-tile"><img src="logo-full.png" alt="ADF, Apporteur de financement"></div><div class="card">
     <h2>${reg?'Créer mon compte':'Connexion'}</h2>
     <div class="tabs2"><button class="btn ${!reg?'primary':''}" data-act="authMode" data-m="login">Se connecter</button><button class="btn ${reg?'primary':''}" data-act="authMode" data-m="register">Créer un compte</button></div>
     <form class="f" id="fAuth" style="grid-template-columns:1fr">
@@ -418,7 +427,7 @@ function vMoi(now){
   <div class="kpis">
     <div class="kpi"><span class="l">Mes cotisations</span><span class="v">${FF(a.total)}</span><span class="s muted">${(a.total/c.objectif*100).toFixed(1)} % de ${FF(c.objectif)}</span><div class="meter"><i style="width:${Math.min(100,a.total/c.objectif*100)}%"></i></div></div>
     <div class="kpi"><span class="l">Reste à verser d'ici le ${fr(c.echeance)}</span><span class="v">${FF(a.restant)}</span><span class="s muted">dont part libre ${FF(a.libreRest)} · conseillé ${F(Math.ceil(a.rythme/50)*50)} F/sem. en plus</span></div>
-    <div class="kpi"><span class="l">Pénalités payées</span><span class="v">${FF(a.pen)}</span><span class="s muted">${a.lateCount} retard${a.lateCount>1?'s':''} · ${a.dues} semaine${a.dues>1?'s':''} due${a.dues>1?'s':''} aujourd'hui</span></div>
+    <div class="kpi"><span class="l">Pénalités et amendes payées</span><span class="v">${FF(a.pen)}</span>${a.amDues?`<span class="s"><b>${FF(a.amDues)} d'amendes à payer</b></span>`:''}<span class="s muted">${a.lateCount} retard${a.lateCount>1?'s':''} · ${a.dues} semaine${a.dues>1?'s':''} due${a.dues>1?'s':''} aujourd'hui</span></div>
     <div class="kpi"><span class="l">Dérogations utilisées</span><span class="v">${fmN} / ${c.maxFM}</span><span class="s muted">force majeure (art. 8)</span></div>
     <div class="kpi"><span class="l">Ma part des pénalités du groupe</span><span class="v">${FF(P.partPen)}</span><span class="s muted">+ ${FF(P.partInt+P.partRoi)} d'intérêts et retours</span></div>
   </div>
@@ -426,10 +435,14 @@ function vMoi(now){
     <div class="legend">${Object.entries(lab).map(([k,l])=>`<span><i class="cell c-${k}"></i>${l}</span>`).join('')}</div>
     <div class="heat"><table><tbody><tr>${wks.map(w=>{const x=mp.get(w); const st=x?x.state:'none'; return `<td><i class="cell c-${st}" title="${esc(frc(S2(w))+' · '+(x?lab[st]:'Avant adhésion')+(x&&x.pay?' · versé le '+fr(x.pay.date):''))}"></i></td>`;}).join('')}</tr></tbody></table></div>
   </div>
+  ${(()=>{ const AM=amendesOf(m.id); return AM.l.length?`<div class="card"><div class="card-h"><h2>Mes amendes</h2>${AM.dues?pill('warn',FF(AM.dues)+' à payer'):pill('ok','Tout est réglé')}</div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Motif</th><th class="n">Montant</th><th>Statut</th></tr></thead><tbody>
+    ${AM.l.sort((x,y)=>String(y.date).localeCompare(String(x.date))).map(x=>`<tr><td>${fr(x.date)}</td><td class="wrap small">${esc(AMENDE_TYPES[x.type]||'')}${x.motif?`<br><span class="muted">${esc(x.motif)}</span>`:''}</td><td class="n">${F(x.montant)}</td><td>${x.payee?pill('ok','Payée le '+fr(x.payeDate)):pill('warn','À payer')}</td></tr>`).join('')}
+    </tbody></table></div></div>`:''; })()}
   <div class="card"><div class="card-h"><h2>Historique de mes dépôts</h2><span class="small muted">${pays.length} versements</span></div>
     <div class="tbl"><table><thead><tr><th>Date</th><th class="n">Montant</th><th class="n">Pénalité</th><th>Observation</th></tr></thead><tbody>
     ${pays.length?pays.map(p=>`<tr><td>${fr(p.date)}${p.heure?` <span class="small muted">${p.heure}</span>`:''}</td><td class="n">${F(p.montant)}</td><td class="n">${+p.penalite?F(p.penalite):''}</td><td class="wrap small muted">${esc(p.obs||'')}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Aucun versement.</td></tr>'}
-    </tbody><tfoot><tr><td>Total</td><td class="n">${F(a.total)}</td><td class="n">${F(a.pen)}</td><td></td></tr></tfoot></table></div>
+    </tbody><tfoot><tr><td>Total</td><td class="n">${F(a.total)}</td><td class="n">${F(pays.reduce((s,p)=>s+(+p.penalite||0),0))}</td><td></td></tr></tfoot></table></div>
   </div>`;
 }
 
@@ -502,8 +515,8 @@ const CHOIX={pour:['ok','Pour'],contre:['bad','Contre'],abst:['mute','Abstention
 function resultatScrutin(sc){
   const vs=S.votes[sc.id]||[]; const n=actifs().length;
   const c={pour:0,contre:0,abst:0}; vs.forEach(v=>{ if(c[v.choix]!=null) c[v.choix]++; });
-  const adopte = sc.regle==='unanimite' ? c.pour===n && n>0 : c.pour > n/2;
-  const txt = `${adopte?'Adopté':'Rejeté'} (${sc.regle==='unanimite'?'unanimité requise':'majorité des membres requise'}) : ${c.pour} pour, ${c.contre} contre, ${c.abst} abstention${c.abst>1?'s':''}, ${n-vs.length} sans vote, sur ${n} membres actifs`;
+  const adopte = sc.regle==='unanimite' ? c.pour===n && n>0 : c.pour > c.contre;
+  const txt = `${adopte?'Adopté':'Rejeté'} (${sc.regle==='unanimite'?'unanimité requise':'majorité simple'}) : ${c.pour} pour, ${c.contre} contre, ${c.abst} abstention${c.abst>1?'s':''}, ${n-vs.length} sans vote, sur ${n} membres actifs`;
   return {c, n, votants:vs.length, adopte, txt};
 }
 function vVotes(now){
@@ -518,7 +531,7 @@ function vVotes(now){
     return `<div class="card scrutin ${sc.statut!=='ouvert'?'clos':''}">
       <div class="card-h"><h2>${esc(sc.objet)}</h2>${sc.statut==='ouvert'?(depasse?pill('warn','Délai dépassé'):pill('info','Vote ouvert')):(sc.adopte?pill('ok','Adopté'):pill('bad','Rejeté'))}</div>
       ${sc.description?`<p class="small" style="margin:0;white-space:pre-wrap">${esc(sc.description)}</p>`:''}
-      <dl class="kv"><dt>Règle</dt><dd>${sc.regle==='unanimite'?'Unanimité des membres actifs (art. 6)':'Majorité des membres actifs (art. 13)'}</dd>
+      <dl class="kv"><dt>Règle</dt><dd>${sc.regle==='unanimite'?'Unanimité des membres actifs (art. 6)':'Majorité simple : plus de Pour que de Contre (art. 13)'}</dd>
         <dt>${sc.statut==='ouvert'?'Clôture prévue':'Clôturé le'}</dt><dd>${sc.statut==='ouvert'?(sc.limite?fr(sc.limite.slice(0,10))+' à '+sc.limite.slice(11,16):'à la décision du bureau'):fr(String(sc.clos).slice(0,10))}</dd>
         <dt>Participation</dt><dd>${r.votants} / ${r.n} membres ont voté</dd></dl>
       <div class="meter"><i style="width:${r.n?r.votants/r.n*100:0}%"></i></div>
@@ -540,7 +553,7 @@ function vVotes(now){
     <form class="f" id="fScr">
       <label class="full">Question soumise au vote<input id="sv_o" required placeholder="Ex. Investir 300 000 F dans l'achat de pagnes Vlisco"></label>
       <label class="full">Explications (montant, conditions, documents…)<textarea id="sv_d"></textarea></label>
-      <label>Règle de décision<select id="sv_r"><option value="majorite">Majorité des membres actifs (art. 13)</option><option value="unanimite">Unanimité (retrait, investissement : art. 6)</option></select></label>
+      <label>Règle de décision<select id="sv_r"><option value="majorite">Majorité simple (art. 13)</option><option value="unanimite">Unanimité (retrait, investissement : art. 6)</option></select></label>
       <label>Date limite<input type="date" id="sv_ld"></label>
       <label>Heure limite<input type="time" id="sv_lh" value="20:00"></label>
       <div class="row full"><button class="btn primary" type="submit">Ouvrir le vote</button></div>
@@ -550,7 +563,7 @@ function vVotes(now){
 }
 function annonceScrutin(sc){
   return [`*GROUPEMENT ADF : vote en ligne*`,``,`🗳️ ${sc.objet}`, sc.description?`\n${sc.description}\n`:'',
-    `Règle : ${sc.regle==='unanimite'?'unanimité des membres':'majorité des membres'}`,
+    `Règle : ${sc.regle==='unanimite'?'unanimité des membres':'majorité simple'}`,
     sc.limite?`Vote ouvert jusqu'au ${fr(sc.limite.slice(0,10))} à ${sc.limite.slice(11,16).replace(':','h')}`:'',
     ``,`Votez dans l'application, onglet « Votes » :`, location.href.split('#')[0]].filter(x=>x!=='').join('\n');
 }
@@ -559,7 +572,7 @@ function annonceScrutin(sc){
 function vDash(now){
   const c=cfg(); const ms=actifs(); const an=ms.map(m=>({m,a:analyse(m,null,now)}));
   const tot=an.reduce((s,x)=>s+x.a.total,0), obj=ms.length*c.objectif;
-  const pen=S.cots.reduce((s,p)=>s+(+p.penalite||0),0);
+  const pen=penalitesEncaissees(); const amD=(S.amendes||[]).filter(a=>!a.payee);
   const solde=soldeTheorique();
   const half=c.objectif/2; const okHalf=an.filter(x=>x.a.total>=half).length;
   const lw=lastDueWeek(now);
@@ -570,7 +583,7 @@ function vDash(now){
   <div class="kpis">
     <div class="kpi"><span class="l">Total cotisé · ${ms.length} membres actifs</span><span class="v">${FF(tot)}</span><span class="s muted">sur ${FF(obj)} attendus au ${fr(c.echeance)}</span><div class="meter"><i style="width:${obj?Math.min(100,tot/obj*100):0}%"></i></div></div>
     <div class="kpi"><span class="l">Solde théorique du compte MoMo</span><span class="v">${FF(solde)}</span><span class="s ${ecart===null?'muted':ecart===0?'':'muted'}">${rel?`Relevé du ${fr(rel.date)} : ${FF(rel.solde)} · écart ${ecart>=0?'+':''}${F(ecart)} F`:'Aucun relevé MoMo saisi'}</span></div>
-    <div class="kpi"><span class="l">Pénalités encaissées</span><span class="v">${FF(pen)}</span><span class="s muted">${S.cots.filter(p=>+p.penalite>0).length} versements pénalisés</span></div>
+    <div class="kpi"><span class="l">Pénalités encaissées</span><span class="v">${FF(pen)}</span><span class="s muted">${S.cots.filter(p=>+p.penalite>0).length} retards · ${amPayees().length} amendes payées${amD.length?` · <b>${FF(amD.reduce((s,a)=>s+(+a.montant||0),0))} d'amendes dues</b>`:''}</span></div>
     <div class="kpi"><span class="l">Condition d'investissement (art. 4)</span><span class="v">${okHalf} / ${ms.length}</span><span class="s">${okHalf===ms.length&&ms.length?pill('ok','Investissement autorisé'):pill('mute',`Chaque membre doit atteindre ${FF(half)}`)}</span></div>
   </div>
   <div class="grid2">
@@ -621,7 +634,9 @@ function vCots(now){
       <label>Heure<input type="time" id="c_h" value="${ed?.heure||now.heure}"></label>
       <label>Montant (F)<input type="number" step="50" id="c_a" value="${ed?.montant??c.cotisation}"></label>
       <label>Pénalité (F)<input type="number" min="0" step="10" id="c_p" value="${ed?.penalite??0}"></label>
-      <label class="full">Observation<input id="c_o" value="${esc(ed?.obs||'')}" placeholder="Ex. capture reçue le 20/09 à 2h22"></label>
+      <label>Capture reçue le<input type="date" id="c_cd" value="${ed?.captureLe?.slice(0,10)||''}"></label>
+      <label>à<input type="time" id="c_ch" value="${ed?.captureLe?.slice(11,16)||''}"></label>
+      <label class="full">Observation<input id="c_o" value="${esc(ed?.obs||'')}" placeholder="Ex. paiement par dépôt chez un agent"></label>
       <div class="hint full" id="c_hint"></div>
       <p class="small muted full" style="margin:0">Un versement peut être modifié ou supprimé pendant 24 h, puis il est verrouillé. Pour corriger une erreur ancienne, enregistrez un montant négatif avec une observation (écriture de correction).</p>
       <div class="row full"><button class="btn primary" type="submit">${ed?'Enregistrer les modifications':'Enregistrer le versement'}</button></div>
@@ -631,14 +646,16 @@ function vCots(now){
     <div class="card">
       <div class="card-h"><h2>Message WhatsApp de la semaine</h2>
         <select id="w_s" style="width:auto">${weeksAll().filter(w=>w<=lastDueWeek(now)).reverse().map(w=>`<option value="${w}" ${w===lw?'selected':''}>Samedi ${fr(S2(w))}</option>`).join('')}</select></div>
-      <pre class="msg" id="w_msg">${esc(waMsg(lw, now))}</pre>
-      <div class="row"><button class="btn primary" data-act="copyMsg">Copier le message</button></div>
+      <textarea class="msg" id="w_msg" rows="16" style="font-family:var(--f-body);font-size:13px">${esc(waMsg(lw, now))}</textarea>
+      <p class="small muted" style="margin:0">Vous pouvez retoucher le texte avant de le copier. Pour changer le modèle de façon permanente : Paramètres → Modèle du message WhatsApp.</p>
+      <div class="row"><button class="btn primary" data-act="copyMsg">Copier le message</button><button class="btn" data-act="goto" data-tab="params">Modifier le modèle</button></div>
     </div>
     <div class="card">
       <div class="card-h"><h2>Règle appliquée</h2></div>
       <dl class="kv">
         <dt>Obligatoire</dt><dd>${FF(c.cotisation)} chaque samedi avant ${c.heure}</dd>
         <dt>Retard</dt><dd>Pénalité de ${c.tauxRetard} % (${FF(c.cotisation*c.tauxRetard/100)}), régularisation avant le mercredi</dd>
+        <dt>Capture d'écran</dt><dd>À envoyer au plus tard à ${c.heureCapture.replace(':','h')} le jour du paiement, sinon amende de ${FF(c.penCapture)} (rés. 4)</dd>
         <dt>Surplus</dt><dd>Tout montant au-delà des semaines dues va à la part libre ; il ne paie pas les samedis à venir</dd>
         <dt>Objectif</dt><dd>${FF(c.objectif)} par membre au ${fr(c.echeance)}</dd>
       </dl>
@@ -665,24 +682,105 @@ function updHint(){
   if(cov.length) parts.push(`Couvre ${cov.length>1?'les samedis':'le samedi'} ${cov.map(x=>frc(S2(x.w))+(x.state==='late'?' (en retard)':x.state==='tardif'?' (après mercredi)':x.state==='fm'?' (force majeure)':'')).join(', ')}`);
   else parts.push('Aucune semaine obligatoire due à couvrir');
   if(libre>0) parts.push(`${FF(libre)} vers la part libre`);
-  parts.push(sugg?`pénalité suggérée : ${FF(sugg)}`:'aucune pénalité');
+  parts.push(sugg?`pénalité de retard suggérée : ${FF(sugg)}`:'aucune pénalité de retard');
+  const cd=v('c_cd'), ch=v('c_ch')||'00:00';
+  if(cd && (cd+'T'+ch) > (date+'T'+c.heureCapture)) parts.push(`capture reçue après ${c.heureCapture.replace(':','h')} : amende de ${FF(c.penCapture)} à enregistrer (rés. 4)`);
   el.textContent = parts.join(' · ')+'.';
   const pe=document.getElementById('c_p'); if(pe && !S.editCot && pe.dataset.touched!=='1') pe.value=sugg;
 }
-function waMsg(w, now){
-  const c=cfg(); const ms=actifs();
+const MODELE_WA_DEFAUT = `📊 *GROUPEMENT ADF : POINT HEBDOMADAIRE DES COTISATIONS & PÉNALITÉS*
+
+📅 _Date : {date}_
+
+Chers membres, {salutation}.
+
+Voici le point officiel et actualisé de la situation financière de notre groupement à ce jour :
+
+💰 *BILAN GLOBAL DE LA TRÉSORERIE*
+
+• *Total cotisé :* *{total}* (soit un taux global de réalisation de *{taux}* sur l'objectif annuel de {objectif_groupe}).
+• *Total des pénalités encaissées :* *{penalites}* (liées aux retards enregistrés).
+• *Solde global de la caisse / MoMo :* *{solde}*.
+
+---
+
+📋 *DÉTAIL PAR MEMBRE (Objectif individuel : {objectif})*
+
+{detail_membres}
+
+---
+
+⏳ *Cotisation du samedi {semaine} non reçue :* {non_recu}
+⚠️ *Amendes restant dues ({amendes_dues}) :*
+{detail_amendes_dues}
+
+💡 *RAPPELS IMPORTANTS :*
+
+• Bravo à tous les membres pour la régularité et le maintien de la dynamique de versement.
+• Pour rappel, conformément à nos nouvelles résolutions validées, veillez à respecter rigoureusement l'échéance du samedi à 17h00 ainsi que l'envoi de vos captures d'écran justificatives au plus tard à 23h59 pour éviter l'application des pénalités de retard.
+
+Continuons sur cette belle lancée pour atteindre nos objectifs collectifs !
+
+*Le Bureau Exécutif – Groupement ADF*`;
+const MOTS_CLES = [
+  ['date',"date du jour (11 octobre 2026)"],['salutation','bonjour ou bonsoir selon l’heure'],['total','total cotisé du groupe'],['taux','taux de réalisation (14,30%)'],
+  ['objectif_groupe','objectif annuel du groupe'],['objectif','objectif individuel'],['penalites','pénalités et amendes encaissées'],['solde','solde de la caisse / MoMo'],
+  ['detail_membres','liste numérotée des membres avec cotisé, %, pénalités et reste'],['semaine','samedi choisi'],['a_temps','membres à jour ce samedi'],['nb_a_temps','leur nombre'],
+  ['en_retard','membres ayant payé en retard'],['force_majeure','membres en dérogation'],['non_recu','membres n’ayant pas encore payé'],['nb_non_recu','leur nombre'],
+  ['mercredi','date limite de régularisation'],['penalite_retard','montant de la pénalité de retard'],['detail_amendes_dues','liste des amendes non payées'],['amendes_dues','total des amendes dues'],
+  ['prochaine','prochaine échéance'],['lien','lien vers l’application']];
+const pctTxt = x => (Math.round(x*100)/100).toLocaleString('fr-FR',{maximumFractionDigits:2});
+function waVars(w, now){
+  const c=cfg(); const ms=actifs(); const an=ms.map(m=>({m,a:analyse(m,null,now)}));
   const ok=[], late=[], fm=[], due=[];
-  let tot=0;
-  for(const m of ms){ const a=analyse(m,null,now); tot+=a.total; const x=a.wk.find(y=>y.w===w); if(!x) continue;
-    if(x.state==='ok') ok.push(m.nom); else if(x.state==='late'||x.state==='tardif') late.push(m.nom); else if(x.state==='fm') fm.push(m.nom); else if(x.state==='due') due.push(m.nom); }
-  const L=[`*GROUPEMENT ADF : point des cotisations*`,`Semaine du samedi ${fr(S2(w))}`,''];
-  L.push(`✅ À temps (${ok.length}) : ${ok.join(', ')||'–'}`);
-  if(late.length) L.push(`🕒 En retard, pénalité ${c.tauxRetard} % (${late.length}) : ${late.join(', ')}`);
-  if(fm.length) L.push(`🛡️ Force majeure (${fm.length}) : ${fm.join(', ')}`);
-  if(due.length) L.push(`⏳ Non reçu (${due.length}) : ${due.join(', ')}\nÀ régulariser avant mercredi ${fr(S2(w+4))} avec la pénalité de ${FF(c.cotisation*c.tauxRetard/100)}.`);
-  L.push('',`Total cotisé du groupe : ${FF(tot)} / ${FF(ms.length*c.objectif)}`);
-  L.push(`Prochaine échéance : samedi ${fr(S2(w+7))} à ${c.heure.replace(':','h')}`);
-  return L.join('\n');
+  for(const {m,a} of an){ const x=a.wk.find(y=>y.w===w); if(!x) continue;
+    if(x.state==='ok') ok.push(m.nom); else if(x.state==='late'||x.state==='tardif') late.push(m.nom); else if(x.state==='fm') fm.push(m.nom); else if(x.state==='due'||x.state==='open') due.push(m.nom); }
+  const tot=an.reduce((s,x)=>s+x.a.total,0), obj=ms.length*c.objectif;
+  const detail=[...an].sort((x,y)=>y.a.total-x.a.total).map(({m,a},i)=>`${i+1}. *${m.nom}* : ${F(a.total)} F (${pctTxt(a.total/c.objectif*100)}%${a.pen?` — Pénalité : ${F(a.pen)}F`:''} — Reste : ${F(a.restant)} F)`).join('\n\n');
+  const amD=(S.amendes||[]).filter(x=>!x.payee).sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+  const h=+new Date().getHours();
+  const dLong=new Date(D(now.date)*864e5).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'});
+  return { date:dLong, salutation: h<13?'bonjour':'bonsoir', total:F(tot)+' FCFA', taux:(obj?tot/obj*100:0).toFixed(2).replace('.',',')+'%', objectif_groupe:F(obj)+' FCFA', objectif:F(c.objectif)+' FCFA',
+    penalites:F(penalitesEncaissees())+' FCFA', solde:F(soldeTheorique())+' FCFA', detail_membres:detail, semaine:fr(S2(w)),
+    a_temps:ok.join(', '), nb_a_temps:String(ok.length), en_retard:late.join(', '), nb_en_retard:String(late.length), force_majeure:fm.join(', '),
+    non_recu:due.join(', '), nb_non_recu:due.length?String(due.length):'', mercredi:fr(S2(w+4)), penalite_retard:FF(c.cotisation*c.tauxRetard/100),
+    detail_amendes_dues: amD.map(x=>`• ${memById(x.membreId)?.nom||'?'} : ${F(x.montant)} F (${(AMENDE_TYPES[x.type]||x.motif||'').replace(/ \(rés\. \d\)/,'')}${x.date?', '+fr(x.date):''})`).join('\n'),
+    amendes_dues: amD.length?F(amD.reduce((s,x)=>s+(+x.montant||0),0))+' FCFA':'', prochaine:`samedi ${fr(S2(w+7))} à ${c.heure.replace(':','h')}`, lien:location.href.split('#')[0] };
+}
+// Remplace les mots-clés ; une ligne dont un mot-clé est vide est retirée (ex. « Non reçu » quand tout le monde a payé)
+function renderModele(tpl, vars){
+  const lines=String(tpl).split('\n').filter(line=>![...line.matchAll(/\{(\w+)\}/g)].some(m=>(m[1] in vars) && !vars[m[1]]));
+  return lines.join('\n').replace(/\{(\w+)\}/g,(m,k)=>k in vars?vars[k]:m).replace(/\n{3,}/g,'\n\n').trim();
+}
+function waMsg(w, now){ return renderModele(cfg().modeleWA || MODELE_WA_DEFAUT, waVars(w, now)); }
+
+// ---------- Amendes (bureau) ----------
+function vAmendes(now){
+  const c=cfg(); const list=[...(S.amendes||[])].sort((a,b)=>(a.payee?1:0)-(b.payee?1:0)||String(b.date).localeCompare(String(a.date)));
+  const dues=list.filter(a=>!a.payee);
+  return `
+  <div class="kpis">
+    <div class="kpi"><span class="l">Amendes dues</span><span class="v">${FF(dues.reduce((s,a)=>s+(+a.montant||0),0))}</span><span class="s muted">${dues.length} amende${dues.length>1?'s':''} non payée${dues.length>1?'s':''}</span></div>
+    <div class="kpi"><span class="l">Amendes encaissées</span><span class="v">${FF(amPayees().reduce((s,a)=>s+(+a.montant||0),0))}</span><span class="s muted">réparties entre les membres comme les pénalités (art. 3)</span></div>
+  </div>
+  <div class="card w-only"><div class="card-h"><h2>Enregistrer une amende</h2></div>
+    <p class="small muted" style="margin:0">Les amendes de capture sont créées automatiquement depuis le formulaire de versement, et celles d'absence depuis la fiche de présence d'une réunion. Ce formulaire sert aux autres cas.</p>
+    <form class="f" id="fAm">
+      <label>Membre<select id="am_m">${memOpts()}</select></label>
+      <label>Motif<select id="am_t">${Object.entries(AMENDE_TYPES).map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label>Date des faits<input type="date" id="am_d" value="${now.date}"></label>
+      <label>Montant (F)<input type="number" id="am_x" value="${c.penCapture}"></label>
+      <label class="full">Précision<input id="am_o" placeholder="Ex. réunion du 18/10, capture du versement du 10/10"></label>
+      <div class="row full"><button class="btn primary" type="submit">Enregistrer l'amende</button></div>
+    </form></div>
+  <div class="card"><div class="card-h"><h2>Registre des amendes</h2></div>
+    <div class="tbl"><table><thead><tr><th>Date</th><th>Membre</th><th>Motif</th><th class="n">Montant</th><th>Statut</th><th class="w-only"></th></tr></thead><tbody>
+    ${list.length?list.map(a=>`<tr><td>${fr(a.date)}</td><td>${esc(memById(a.membreId)?.nom||'?')}</td><td class="wrap small">${esc(AMENDE_TYPES[a.type]||'')}${a.motif?`<br><span class="muted">${esc(a.motif)}</span>`:''}</td><td class="n">${F(a.montant)}</td><td>${a.payee?pill('ok','Payée le '+fr(a.payeDate)):pill('warn','Due')}</td>
+      <td class="w-only"><div class="row">${!a.payee?`<button class="btn sm primary" data-act="payerAmende" data-id="${a.id}">Encaisser</button>`:''}
+      ${a.payee&&amendeEditable(a)?`<button class="btn sm" data-act="annulerPaiement" data-id="${a.id}">Annuler l'encaissement</button>`:''}
+      ${!a.payee&&amendeEditable(a)?(S.confirm===a.id?`<span class="confirm">Supprimer ? <button class="btn sm danger" data-act="delAmende" data-id="${a.id}">Oui</button><button class="btn sm" data-act="noConfirm">Non</button></span>`:`<button class="btn sm danger" data-act="askDel" data-id="${a.id}">Supprimer</button>`):''}
+      ${a.payee&&!amendeEditable(a)?LOCK:''}</div></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Aucune amende.</td></tr>'}
+    </tbody></table></div></div>`;
 }
 
 // ---------- Membres ----------
@@ -699,7 +797,7 @@ function vMembres(now){
       <label>Parrain<select id="m_p"><option value="">Fondateur / aucun</option>${memOpts(ed?.parrain, S.membres.filter(x=>x.id!==ed?.id).sort(byOrdre))}</select></label>
       <label>1er samedi dû<input type="date" id="m_d" value="${ed?.debut||c.debut}"></label>
       <label>Statut<select id="m_s">${Object.entries(SL).map(([k,[,l]])=>`<option value="${k}" ${(ed?.statut||'actif')===k?'selected':''}>${l}</option>`).join('')}</select></label>
-      <label>Rôle<input id="m_r" value="${esc(ed?.role||'')}" placeholder="Ex. Trésorier"></label>
+      <label>Rôle<input id="m_r" list="dl_roles" value="${esc(ed?.role||'')}" placeholder="Ex. Trésorier"><datalist id="dl_roles">${['Fondateur','Membre','Trésorier','Chargé de recouvrement','Secrétaire général','Modérateur'].map(r=>`<option value="${r}">`).join('')}</datalist></label>
       <div class="row full"><button class="btn primary" type="submit">${ed?'Enregistrer':'Ajouter le membre'}</button></div>
     </form>
   </div>
@@ -797,6 +895,9 @@ function vDecs(now){
       <label class="full">Résultat<input id="d_r" placeholder="Laissez vide pour un vote : le résultat est calculé"></label>
       <label>Responsable<input id="d_p" value="Bureau ADF"></label>
       <label>Lien vers le document<input id="d_l"></label>
+      <div class="full"><h3 style="margin-bottom:8px">Présences (réunion officielle uniquement)</h3>
+        <p class="small muted" style="margin:0 0 8px">Absence non justifiée : amende de ${FF(cfg().penAbsence)}, ou ${FF(cfg().penAbsence2)} si le membre était déjà absent sans justification à la réunion officielle précédente (rés. 2 et 3). Les amendes sont créées à l'enregistrement.</p>
+        <div class="tbl"><table><tbody>${ms.map(m=>`<tr><td>${esc(m.nom)}</td><td><select id="pres_${m.id}" style="width:auto"><option value="P">Présent</option><option value="AJ">Absent justifié</option><option value="AN">Absent non justifié</option></select></td></tr>`).join('')}</tbody></table></div></div>
       <div class="full"><h3 style="margin-bottom:8px">Votes (une voix par membre, art. 13)</h3>
         <div class="tbl"><table><tbody>${ms.map(m=>`<tr><td>${esc(m.nom)}</td><td><select id="vote_${m.id}" style="width:auto"><option value="">—</option><option value="pour">Pour</option><option value="contre">Contre</option><option value="abst">Abstention</option></select></td></tr>`).join('')}</tbody></table></div></div>
       <div class="row full"><button class="btn primary" type="submit">Enregistrer</button></div>
@@ -876,10 +977,17 @@ function vParams(){
       <label>Pénalité de clôture (%)<input type="number" id="p_k" value="${c.tauxCloture}"></label>
       <label>Majoration par jour (%)<input type="number" id="p_j" value="${c.tauxJour}"></label>
       <label>Dérogations max. par membre<input type="number" id="p_f" value="${c.maxFM}"></label>
-      <div class="full"><h3>Bureau élu (art. 12)</h3></div>
-      <label>Président<input id="p_bp" value="${esc(c.bureau.president)}"></label>
-      <label>Trésorier<input id="p_bt" value="${esc(c.bureau.tresorier)}"></label>
-      <label>Secrétaire<input id="p_bs" value="${esc(c.bureau.secretaire)}"></label>
+      <div class="full"><h3>Amendes (résolutions d'octobre 2026)</h3></div>
+      <label>Capture en retard (F)<input type="number" id="p_pc" value="${c.penCapture}"></label>
+      <label>Heure limite de la capture<input type="time" id="p_hc" value="${c.heureCapture}"></label>
+      <label>Absence non justifiée (F)<input type="number" id="p_pa" value="${c.penAbsence}"></label>
+      <label>2e absence successive (F)<input type="number" id="p_pa2" value="${c.penAbsence2}"></label>
+      <div class="full"><h3>Rôles opérationnels (art. 12, rés. 6)</h3></div>
+      <datalist id="dl_noms">${actifs().map(m=>`<option value="${esc(m.nom)}">`).join('')}</datalist>
+      <label>Trésorier<input id="p_bt" list="dl_noms" value="${esc(c.bureau.tresorier||'')}"></label>
+      <label>Chargé de recouvrement<input id="p_br" list="dl_noms" value="${esc(c.bureau.recouvrement||'')}"></label>
+      <label>Secrétaire général<input id="p_bs" list="dl_noms" value="${esc(c.bureau.secretaire||'')}"></label>
+      <label>Modérateur<input id="p_bm" list="dl_noms" value="${esc(c.bureau.moderateur||'')}"></label>
       <div class="full"><h3>Gestion triangulaire de la SIM (art. 5)</h3></div>
       <label>Titulaire de la SIM<input id="p_st" value="${esc(c.sim.titulaire)}"></label>
       <label>Détenteur du code<input id="p_sc" value="${esc(c.sim.code)}"></label>
@@ -887,6 +995,13 @@ function vParams(){
       <div class="row full w-only"><button class="btn primary" type="submit">Enregistrer les paramètres</button></div>
     </form>
     <p class="small muted">Avec ${FF(c.cotisation)} sur ${c.semaines} semaines, la part obligatoire vaut ${FF(c.cotisation*c.semaines)} ; la part libre vaut ${FF(c.objectif-c.cotisation*c.semaines)} par membre.</p>
+  </div>
+  <div class="card w-only"><div class="card-h"><h2>Modèle du message WhatsApp</h2>${c.modeleWA?pill('info','Modèle personnalisé'):pill('mute','Modèle par défaut')}</div>
+    <p class="small muted" style="margin:0">Écrivez le message avec des mots-clés entre accolades : l'application les remplace à chaque génération. Une ligne dont le mot-clé est vide disparaît (par exemple « non reçu » quand tout le monde a payé). Dans WhatsApp, *texte* s'affiche en gras et _texte_ en italique.</p>
+    <textarea id="p_wa" rows="18" style="font-family:var(--f-mono);font-size:12.5px">${esc(c.modeleWA||MODELE_WA_DEFAUT)}</textarea>
+    <details><summary class="small" style="cursor:pointer">Mots-clés disponibles</summary><dl class="kv" style="margin-top:8px">${MOTS_CLES.map(([k,d])=>`<dt><code>{${k}}</code></dt><dd style="font-weight:500">${esc(d)}</dd>`).join('')}</dl></details>
+    <div class="row"><button class="btn primary" data-act="saveModele">Enregistrer le modèle</button><button class="btn" data-act="previewModele">Aperçu</button><button class="btn" data-act="resetModele">Revenir au modèle par défaut</button></div>
+    <pre class="msg" id="p_wa_prev" hidden></pre>
   </div>
   <div class="card w-only"><div class="card-h"><h2>Accès des membres</h2></div>
     <p class="small muted">Chaque membre crée son compte avec son e-mail sur l'écran de connexion. Il apparaît ici « en attente ». Donnez « Membre » pour la consultation ou « Bureau » pour la saisie, puis reliez chaque compte à sa fiche pour qu'il puisse voter.</p>
@@ -910,6 +1025,7 @@ async function exporter(){
     ['Membre','Statut','Cotisé','Avancement %','Reste à payer','Part libre versée','Reste part libre','Retards','Pénalités payées','Pénalités reçues (répartition)','Dérogations utilisées'],
     ...comptes().map(m=>{const a=analyse(m,null,now); return [m.nom, m.statut==='actif'?STL[a.statut]:m.statut, a.total, +(a.total/c.objectif*100).toFixed(2), a.restant, a.libre, a.libreRest, a.lateCount, a.pen, +(R.parM[m.id]||0).toFixed(2), a.fmUsed];})],
     [26,13,11,12,13,15,15,9,14,24,10]);
+  add('Amendes',[['Date','Membre','Motif','Précision','Montant','Payée','Date de paiement'],...(S.amendes||[]).map(a=>[fr(a.date),nm(a.membreId),AMENDE_TYPES[a.type]||'',a.motif||'',+a.montant||0,a.payee?'Oui':'Non',fr(a.payeDate||'')])],[11,26,40,40,10,8,14]);
   add('Versements',[['Date','Heure','Membre','Montant','Pénalité','Observation'],...[...S.cots].sort(payOrder).map(p=>[fr(p.date),p.heure||'',nm(p.membreId),+p.montant||0,+p.penalite||0,p.obs||''])],[11,7,26,10,9,44]);
   const wks=weeksAll().filter(w=>w<=currentWeek(now));
   const LAB={ok:'À temps',late:'Retard',tardif:'Après mercredi',fm:'Force majeure',due:'Impayé',open:'En cours',future:''};
@@ -928,15 +1044,15 @@ async function exporter(){
 function telecharger(blob, name){ const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
 function backupJson(){
   const strip=a=>a.map(o=>{const c={...o}; return c;});
-  const data={version:1, exporte:stamp(), config:S.cfg, membres:strip(S.membres), cotisations:strip(S.cots), forcemajeure:strip(S.fm), tresorerie:strip(S.tres), decisions:strip(S.decs), scrutins:S.scrutins.map(x=>({...x, votes:S.votes[x.id]||[]}))};
+  const data={version:1, exporte:stamp(), config:S.cfg, membres:strip(S.membres), cotisations:strip(S.cots), forcemajeure:strip(S.fm), tresorerie:strip(S.tres), decisions:strip(S.decs), amendes:strip(S.amendes||[]), scrutins:S.scrutins.map(x=>({...x, votes:S.votes[x.id]||[]}))};
   telecharger(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}), `ADF_sauvegarde_${nowLocal().date}.json`);
   toast('Sauvegarde téléchargée.');
 }
 async function importJson(file){
   let d; try{ d=JSON.parse(await file.text()); }catch(_){ toast('Fichier illisible.'); return; }
-  const map={membres:'membres',cotisations:'cotisations',forcemajeure:'forcemajeure',tresorerie:'tresorerie',decisions:'decisions'};
+  const map={membres:'membres',cotisations:'cotisations',forcemajeure:'forcemajeure',tresorerie:'tresorerie',decisions:'decisions',amendes:'amendes'};
   const writes=[]; if(d.config) writes.push(['adf','config',d.config]);
-  for(const [k,col] of Object.entries(map)) for(const o of (d[k]||[])){ const c={...o}; const id=c.id; delete c.id; if(LOCKED_COLS.includes(col)){ c.creeLe=SV(); if(col==='forcemajeure' && c.statut!=='attente') c.decideLe=SV(); else delete c.decideLe; } if(id) writes.push([col,id,c]); }
+  for(const [k,col] of Object.entries(map)) for(const o of (d[k]||[])){ const c={...o}; const id=c.id; delete c.id; if(LOCKED_COLS.includes(col)){ c.creeLe=SV(); if(col==='forcemajeure' && c.statut!=='attente') c.decideLe=SV(); else delete c.decideLe; if(col==='amendes'){ if(c.payee) c.payeLe=SV(); else delete c.payeLe; } } if(id) writes.push([col,id,c]); }
   for(const sc of (d.scrutins||[])){ const c={...sc}; const id=c.id; const vs=c.votes||[]; delete c.id; delete c.votes; if(!id) continue; writes.push(['scrutins',id,c]); /* les bulletins individuels ne sont pas réimportés : seul chaque membre peut écrire son vote */ }
   if(!writes.length){ toast('Aucune donnée dans ce fichier.'); return; }
   try{
@@ -959,6 +1075,12 @@ document.addEventListener('click', async e=>{
   if(a==='resetPw'){ const em=v('a_e'); if(!em){ toast("Saisissez d'abord votre e-mail."); return; } try{ await fbAuth.sendPasswordResetEmail(em); toast('E-mail de réinitialisation envoyé.'); }catch(e){ toast(AUTH_ERR[e.code]||'Envoi impossible.'); } return; }
   if(a==='setRole'){ await upd('roles',id,{role:t.dataset.r}); toast('Accès mis à jour.'); return; }
   if(a==='backupJson'){ backupJson(); return; }
+  if(a==='saveModele'){ const t=document.getElementById('p_wa').value; if(await save('adf','config',Object.assign({},cfg(),{modeleWA:t}))) toast('Modèle enregistré.'); return; }
+  if(a==='resetModele'){ if(await save('adf','config',Object.assign({},cfg(),{modeleWA:null}))){ const ta=document.getElementById('p_wa'); if(ta) ta.value=MODELE_WA_DEFAUT; toast('Modèle par défaut rétabli.'); } return; }
+  if(a==='previewModele'){ const pr=document.getElementById('p_wa_prev'); pr.textContent=renderModele(document.getElementById('p_wa').value, waVars(lastDueWeek(nowLocal()), nowLocal())); pr.hidden=false; return; }
+  if(a==='payerAmende'){ const am=(S.amendes||[]).find(x=>x.id===id); if(!am) return; if(await upd(COLS.amendes,id,{payee:true, payeLe:SV(), payeDate:nowLocal().date})) toast(`Amende de ${FF(am.montant)} encaissée.`); return; }
+  if(a==='annulerPaiement'){ if(await upd(COLS.amendes,id,{payee:false})) toast('Encaissement annulé.'); return; }
+  if(a==='delAmende'){ S.confirm=null; await del(COLS.amendes,id); return; }
   if(a==='voter'){
     if(!S.myMembreId){ toast('Compte non relié à une fiche membre.'); return; }
     try{ await db.collection('scrutins').doc(id).collection('votes').doc(S.myMembreId).set({choix:t.dataset.c, uid:S.user.uid, date:nowLocal().date+'T'+nowLocal().heure}); toast('Vote enregistré : '+CHOIX[t.dataset.c][1]+'.'); }
@@ -990,23 +1112,24 @@ document.addEventListener('click', async e=>{
   if(a==='editMem'){ S.editMem=id; render(); window.scrollTo({top:0,behavior:'smooth'}); return; }
   if(a==='cancelMem'){ S.editMem=null; render(); return; }
   if(a==='fmSet'){ const f=S.fm.find(x=>x.id===id); if(f && t.dataset.s==='validee'){ const n=S.fm.filter(x=>x.membreId===f.membreId&&x.statut==='validee').length; if(n>=cfg().maxFM){ toast('Ce membre a déjà utilisé ses '+cfg().maxFM+' dérogations.'); return; } } const wasPending=f?.statut==='attente'; await upd(COLS.fm,id, wasPending?{statut:t.dataset.s, decideLe:SV()}:{statut:t.dataset.s}); return; }
-  if(a==='copyMsg'){ const txt=document.getElementById('w_msg').textContent; try{ await navigator.clipboard.writeText(txt); toast('Message copié. Collez-le dans le groupe WhatsApp.'); }catch(_){ const r=document.createRange(); r.selectNodeContents(document.getElementById('w_msg')); const s=getSelection(); s.removeAllRanges(); s.addRange(r); toast('Texte sélectionné : copiez-le avec votre clavier.'); } return; }
+  if(a==='copyMsg'){ const txt=document.getElementById('w_msg').value; try{ await navigator.clipboard.writeText(txt); toast('Message copié. Collez-le dans le groupe WhatsApp.'); }catch(_){ const r=document.createRange(); const ta=document.getElementById('w_msg'); ta.focus(); ta.select(); toast('Texte sélectionné : copiez-le avec votre clavier.'); } return; }
 });
 document.addEventListener('input', e=>{
   const id=e.target.id;
-  if(['c_m','c_d','c_h','c_a'].includes(id)) updHint();
+  if(['c_m','c_d','c_h','c_a','c_cd','c_ch'].includes(id)) updHint();
   if(id==='c_p') e.target.dataset.touched='1';
   if(['s_m','s_t','s_d'].includes(id)) sortHint();
 });
 document.addEventListener('change', e=>{
   const id=e.target.id;
   if(id==='c_f'){ S.filtre=e.target.value; render(); }
+  if(id==='am_t'){ const x=document.getElementById('am_x'); if(x) x.value=amendeMontant(e.target.value)||''; }
   if(id.startsWith('lk_')){ const uid=id.slice(3); upd('roles',uid,{membreId:e.target.value||null}).then(ok=>ok&&toast('Compte relié à la fiche.')); }
   if(id==='imp_f' && e.target.files[0]){ importJson(e.target.files[0]); e.target.value=''; }
-  if(id==='w_s'){ S.semMsg=+e.target.value; document.getElementById('w_msg').textContent=waMsg(S.semMsg, nowLocal()); }
+  if(id==='w_s'){ S.semMsg=+e.target.value; document.getElementById('w_msg').value=waMsg(S.semMsg, nowLocal()); }
   if(id==='sim_d'){ S.simDate=e.target.value; render(); }
   if(id==='rd_m'){ S.redist=+e.target.value||0; render(); }
-  if(['c_m','c_d','c_h','c_a'].includes(id)) updHint();
+  if(['c_m','c_d','c_h','c_a','c_cd','c_ch'].includes(id)) updHint();
   if(['s_m','s_t','s_d'].includes(id)) sortHint();
 });
 // remplit l'aide de la sortie à l'ouverture de l'onglet
@@ -1020,6 +1143,12 @@ document.addEventListener('submit', async e=>{
       if(S.authMode==='register'){ const cr=await fbAuth.createUserWithEmailAndPassword(em,pw); try{ await cr.user.sendEmailVerification(); }catch(_){} }
       else await fbAuth.signInWithEmailAndPassword(em,pw);
     }catch(err){ toast(AUTH_ERR[err.code]||'Connexion impossible.'); }
+    return;
+  }
+  if(f==='fAm'){
+    const type=v('am_t'); const d={membreId:v('am_m'), type, date:v('am_d'), montant:+v('am_x')||0, motif:v('am_o'), payee:false};
+    if(!d.membreId||!d.montant){ toast('Indiquez le membre et le montant.'); return; }
+    if(await save(COLS.amendes,null,d)){ toast(`Amende de ${FF(d.montant)} enregistrée.`); render(); }
     return;
   }
   if(f==='fFMm'){
@@ -1038,11 +1167,14 @@ document.addEventListener('submit', async e=>{
     return;
   }
   if(f==='fCot'){
-    const d={membreId:v('c_m'), date:v('c_d'), heure:v('c_h'), montant:+v('c_a')||0, penalite:+v('c_p')||0, obs:v('c_o')};
+    const d={membreId:v('c_m'), date:v('c_d'), heure:v('c_h'), montant:+v('c_a')||0, penalite:+v('c_p')||0, obs:v('c_o'), captureLe: v('c_cd') ? v('c_cd')+'T'+(v('c_ch')||'00:00') : ''};
+    const captureTard = d.captureLe && d.captureLe > d.date+'T'+c.heureCapture;
     if(!d.membreId||!d.date||!d.montant){ toast('Indiquez le membre, la date et un montant.'); return; }
     if(d.montant<0 && !d.obs){ toast("Une correction (montant négatif) doit être expliquée dans l'observation."); return; }
     if(S.editCot){ const old=S.cots.find(p=>p.id===S.editCot); d.cree=old?.cree||stamp(); if(await save(COLS.cots,S.editCot,d)){ S.editCot=null; toast('Versement modifié.'); render(); } }
-    else { d.cree=stamp(); if(await save(COLS.cots,null,d)){ toast(`Versement de ${FF(d.montant)} enregistré pour ${memById(d.membreId).nom}.`); const a=document.getElementById('c_a'); if(a) a.value=c.cotisation; const o=document.getElementById('c_o'); if(o) o.value=''; const p=document.getElementById('c_p'); if(p){p.dataset.touched='';} updHint(); } }
+    else { d.cree=stamp(); const ref=db.collection(COLS.cots).doc(); if(await save(COLS.cots,ref.id,d)){
+      if(captureTard) await save(COLS.amendes,'cap-'+ref.id,{membreId:d.membreId, type:'capture', date:d.captureLe.slice(0,10), montant:c.penCapture, motif:`Versement du ${fr(d.date)} : capture reçue le ${fr(d.captureLe.slice(0,10))} à ${d.captureLe.slice(11,16)}`, payee:false, versementId:ref.id});
+      toast(`Versement de ${FF(d.montant)} enregistré pour ${memById(d.membreId).nom}${captureTard?` · amende capture de ${FF(c.penCapture)} enregistrée`:''}.`); ['c_cd','c_ch'].forEach(i=>{const e=document.getElementById(i); if(e) e.value='';}); const a=document.getElementById('c_a'); if(a) a.value=c.cotisation; const o=document.getElementById('c_o'); if(o) o.value=''; const p=document.getElementById('c_p'); if(p){p.dataset.touched='';} updHint(); } }
   }
   if(f==='fMem'){
     const d={nom:v('m_n'), contact:v('m_c'), parrain:v('m_p'), debut:v('m_d'), statut:v('m_s'), role:v('m_r')};
@@ -1071,10 +1203,22 @@ document.addEventListener('submit', async e=>{
   if(f==='fDec'){
     const votes={}; for(const m of actifs()){ const x=v('vote_'+m.id); if(x) votes[m.id]=x; }
     const n=Object.keys(votes).length; let res=v('d_r');
-    if(!res && n){ const p=Object.values(votes).filter(x=>x==='pour').length; const tot=actifs().length; res = p===tot?`Adopté à l'unanimité (${p}/${tot})`:p>n/2?`Adopté à la majorité (${p} pour sur ${n} votants)`:`Rejeté (${p} pour sur ${n} votants)`; }
+    if(!res && n){ const p=Object.values(votes).filter(x=>x==='pour').length, ct=Object.values(votes).filter(x=>x==='contre').length; const tot=actifs().length; res = p===tot?`Adopté à l'unanimité (${p}/${tot})`:p>ct?`Adopté à la majorité simple (${p} pour, ${ct} contre)`:`Rejeté (${p} pour, ${ct} contre)`; }
     const d={date:v('d_d'), type:v('d_t'), objet:v('d_o'), resultat:res, responsable:v('d_p'), lien:v('d_l'), votes};
     if(!d.objet){ toast("Indiquez l'objet."); return; }
-    if(await save(COLS.decs,null,d)){ toast('Enregistré.'); render(); }
+    let nbAm=0; const amList=[];
+    if(d.type==='Réunion'){
+      const pres={}; for(const m of actifs()) pres[m.id]=v('pres_'+m.id)||'P';
+      d.presences=pres;
+      const prev=[...S.decs].filter(x=>x.type==='Réunion' && x.presences && x.date<d.date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+      for(const [mid,st] of Object.entries(pres)) if(st==='AN'){ const deux = prev?.presences?.[mid]==='AN'; amList.push({mid, type:deux?'absence2':'absence'}); }
+      const np=Object.values(pres).filter(x=>x==='P').length;
+      if(!d.resultat) d.resultat=`${np} présent${np>1?'s':''} sur ${actifs().length}`;
+    }
+    const ref=db.collection(COLS.decs).doc();
+    if(await save(COLS.decs,ref.id,d)){
+      for(const x of amList){ if(await save(COLS.amendes,`abs-${ref.id}-${x.mid}`,{membreId:x.mid, type:x.type, date:d.date, montant:amendeMontant(x.type), motif:`Réunion du ${fr(d.date)} : ${d.objet}`, payee:false, decisionId:ref.id})) nbAm++; }
+      toast(`Enregistré${nbAm?` · ${nbAm} amende${nbAm>1?'s':''} d'absence créée${nbAm>1?'s':''}`:''}.`); render(); }
   }
   if(f==='fSort'){
     const m=memById(v('s_m')); const d=v('s_d'); const type=v('s_t');
@@ -1087,7 +1231,8 @@ document.addEventListener('submit', async e=>{
   if(f==='fCfg'){
     const n=k=>+v(k);
     const d=Object.assign({},cfg(),{cotisation:n('p_c'),objectif:n('p_o'),debut:v('p_d'),semaines:n('p_s'),echeance:v('p_e'),heure:v('p_h'),tauxRetard:n('p_r'),tauxSortie:n('p_x'),tauxCloture:n('p_k'),tauxJour:n('p_j'),maxFM:n('p_f'),
-      bureau:{president:v('p_bp'),tresorier:v('p_bt'),secretaire:v('p_bs')}, sim:{titulaire:v('p_st'),code:v('p_sc'),garde:v('p_sg')}});
+      penCapture:n('p_pc'), heureCapture:v('p_hc')||'23:59', penAbsence:n('p_pa'), penAbsence2:n('p_pa2'),
+      bureau:{tresorier:v('p_bt'),recouvrement:v('p_br'),secretaire:v('p_bs'),moderateur:v('p_bm')}, sim:{titulaire:v('p_st'),code:v('p_sc'),garde:v('p_sg')}});
     if(D(d.debut)!==nextSat(D(d.debut))){ toast('Le 1er jour du cycle doit être un samedi.'); return; }
     if(await save('adf','config',d)) toast('Paramètres enregistrés.');
   }
